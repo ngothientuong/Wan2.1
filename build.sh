@@ -8,8 +8,13 @@ source ${HOME}/ngo/projects/personal/profiles/.env_tngo-ai-svcs
 source ${HOME}/.bashrc
 azurelogin
 # Build the Docker image with the specified version
-az acr build --timeout 14400 --registry tngodemo1cr \
+# Create a build task with a timeout
+az acr task create \
+    --registry tngodemo1cr \
+    --name wan21buildtask \
     --image ttv/wan21/wan2.1:$VERSION \
-    --file Dockerfile .
+    --file Dockerfile \
+    --context . \
+    --timeout 14400
 # Print a message indicating the build is complete
 echo "Docker image built with version $VERSION"
