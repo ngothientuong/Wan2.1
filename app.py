@@ -31,10 +31,8 @@ if NUM_GPUS > 0:
 else:
     logging.info("⚠️ No GPU detected! Running on CPU.")
 
-# ========== Health Check Endpoint ==========
-@app.get("/health")
-async def health_check():
-    return JSONResponse(content={"status": "healthy", "gpus_available": NUM_GPUS})
+# Enable cuDNN auto-tuning for optimal performance
+torch.backends.cudnn.benchmark = True
 
 # ========== Request Schema ==========
 class VideoRequest(BaseModel):
@@ -53,7 +51,7 @@ class VideoRequest(BaseModel):
     prompt_extend_target_lang: str = "en"
     ckpt_dir: str
 
-# ========== Load Model (Multi-GPU) ==========
+# ========== Load Model (Multi-GPU & Optimization) ==========
 MODEL_CACHE = {}
 
 def load_model(task, ckpt_dir):
@@ -62,10 +60,17 @@ def load_model(task, ckpt_dir):
         device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
         logging.info(f"🔄 Loading model {task} on device {device_id} from {ckpt_dir}...")
 
-        with torch.amp.autocast("cuda"):
-            model = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
+        model = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
 
-        MODEL_CACHE[task] = model  # ✅ Store model after moving to device
+        # Apply Multi-GPU
+        if NUM_GPUS > 1:
+            model = torch.nn.DataParallel(model, device_ids=GPU_IDS)
+
+        # Apply optimization (if PyTorch 2.0+)
+        if torch.__version__ >= "2.0.0":
+            model = torch.compile(model)
+
+        MODEL_CACHE[task] = model  # ✅ Store model after loading
     return MODEL_CACHE[task]
 
 # ========== AI-Based Video Interpolation (RIFE) ==========
@@ -99,8 +104,8 @@ def generate_video(request: VideoRequest):
     num_keyframes = request.num_frames // keyframe_interval
     logging.info(f"⚡ Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
 
-    # Multi-GPU Processing
-    batch_size = max(1, num_keyframes // max(1, NUM_GPUS))
+    # Multi-GPU Processing with Optimized Batch Size
+    batch_size = max(64, num_keyframes // max(1, NUM_GPUS))
     keyframes = []
 
     for i in range(0, num_keyframes, batch_size):
@@ -114,7 +119,7 @@ def generate_video(request: VideoRequest):
                 frame_num=batch_size,
                 shift=request.sample_shift,
                 sample_solver="unipc",
-                sampling_steps=50,
+                sampling_steps=5,  # 🔥 Reduced for faster generation
                 guide_scale=request.sample_guide_scale,
                 seed=request.seed,
                 offload_model=request.offload_model
@@ -143,3 +148,8 @@ async def generate_api(request: VideoRequest):
     except Exception as e:
         logging.error(f"❌ Error generating video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ========== Health Check Endpoint ==========
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "healthy", "gpus_available": NUM_GPUS})
