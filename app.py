@@ -22,7 +22,7 @@ logging.basicConfig(
 # ========== Initialize FastAPI App ==========
 app = FastAPI(title="WAN 2.1 Optimized Text-to-Video API")
 
-# ========== Multi-GPU Handling ==========
+# ========== Multi-GPU & Memory Optimization ==========
 NUM_GPUS = torch.cuda.device_count()
 GPU_IDS = list(range(NUM_GPUS))
 
@@ -31,9 +31,30 @@ if NUM_GPUS > 0:
 else:
     logging.info("⚠️ No GPU detected! Running on CPU.")
 
-# ========== Memory Optimization ==========
-torch.set_default_dtype(torch.float16)  # ✅ Force FP16 for lower VRAM usage
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"  # ✅ Prevent VRAM fragmentation
+# ✅ Use PyTorch CUDA Memory Optimizations
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+torch.set_default_dtype(torch.bfloat16)  # ✅ Use bfloat16 for stability
+torch.backends.cuda.matmul.allow_tf32 = True  # ✅ Enable TF32 matmul optimization
+
+# ========== Load Model Once for Reuse ==========
+MODEL_CACHE = {}
+
+def load_model(task, ckpt_dir):
+    """Loads WAN 2.1 model to an available GPU or CPU with optimization."""
+    if task not in MODEL_CACHE:
+        device = f"cuda:{GPU_IDS[0]}" if NUM_GPUS > 0 else "cpu"
+        logging.info(f"🔄 Loading model {task} on {device} from {ckpt_dir}...")
+
+        with torch.amp.autocast(device):
+            model = torch.hub.load("WAN-2.1", model=task).to(device).bfloat16()
+            model = torch.compile(model, mode="max-autotune")  # ✅ Enable dynamic optimizations
+
+        # ✅ Use DataParallel for Multi-GPU
+        if NUM_GPUS > 1:
+            model = torch.nn.DataParallel(model, device_ids=GPU_IDS)
+
+        MODEL_CACHE[task] = model
+    return MODEL_CACHE[task]
 
 # ========== Health Check Endpoint ==========
 @app.get("/health")
@@ -45,32 +66,17 @@ class VideoRequest(BaseModel):
     task: str
     prompt: str
     size: str = "1280*720"
-    num_frames: int = 81
+    num_frames: int = 160  # ✅ Optimized for 10s per request
     fps: int = 16
     seed: int = 42
     offload_model: bool = True
     t5_cpu: bool = True
-    sample_shift: int = 8
-    sample_guide_scale: float = 6.0
+    sample_shift: int = 3  # ✅ Optimized for speed
+    sample_guide_scale: float = 3.0
     use_prompt_extend: bool = False
     prompt_extend_method: str = "dashscope"
     prompt_extend_target_lang: str = "en"
     ckpt_dir: str
-
-# ========== Load Model (Multi-GPU Optimized) ==========
-MODEL_CACHE = {}
-
-def load_model(task, ckpt_dir):
-    """Loads WAN 2.1 model to an available GPU or CPU with memory optimizations."""
-    if task not in MODEL_CACHE:
-        device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
-        logging.info(f"🔄 Loading model {task} on device {device_id} from {ckpt_dir}...")
-
-        with torch.amp.autocast("cuda"):
-            model = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
-
-        MODEL_CACHE[task] = model  # ✅ Store model in cache
-    return MODEL_CACHE[task]
 
 # ========== AI-Based Video Interpolation (RIFE) ==========
 def interpolate_frames(frames, target_fps):
@@ -98,12 +104,12 @@ def generate_video(request: VideoRequest):
         expander = DashScopePromptExpander(is_vl="i2v" in request.task) if request.prompt_extend_method == "dashscope" else QwenPromptExpander(is_vl="i2v" in request.task)
         request.prompt = expander(request.prompt, tar_lang=request.prompt_extend_target_lang).prompt
 
-    # Keyframe Optimization: Generate every 4th frame and interpolate
+    # ✅ Optimized Keyframe Generation
     keyframe_interval = 4
     num_keyframes = request.num_frames // keyframe_interval
     logging.info(f"⚡ Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
 
-    # Multi-GPU Processing
+    # ✅ Optimized Multi-GPU Processing
     batch_size = max(1, num_keyframes // max(1, NUM_GPUS))
     keyframes = []
 
@@ -118,7 +124,7 @@ def generate_video(request: VideoRequest):
                 frame_num=batch_size,
                 shift=request.sample_shift,
                 sample_solver="unipc",
-                sampling_steps=50,
+                sampling_steps=4,  # ✅ Optimized for speed
                 guide_scale=request.sample_guide_scale,
                 seed=request.seed,
                 offload_model=request.offload_model
