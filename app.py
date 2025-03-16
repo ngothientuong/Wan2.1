@@ -134,7 +134,7 @@ def generate_video(request: VideoRequest):
 @app.post("/generate/")
 async def generate_api(request: VideoRequest):
     try:
-        logging.info(f"Received Request: {request.json()}")  # Debugging input payload
+        logging.info(f"Received Request: {request.dict()}")  # ✅ Fixes .json() issue
         video_path = generate_video(request)
         return {"output_path": video_path}
     except Exception as e:

@@ -30,9 +30,17 @@ jobs:
       - name: Check if Docker image exists
         id: check_image
         run: |
-          az acr repository show --name tngodemo1cr --image ttv/wan21/wan2.1:${{ env.VERSION }} || echo "Image not found"
+          VERSION=$(cat VERSION)
+          if az acr repository show-tags --name tngodemo1cr --repository ttv/wan21/wan2.1 --query "[?(@=='$VERSION')]" | grep -q "$VERSION"; then
+            echo "exists=true" >> $GITHUB_ENV
+          else
+            echo "exists=false" >> $GITHUB_ENV
+          fi
 
       - name: Build and push Docker image if not exists
-        if: steps.check_image.outputs.image == 'Image not found'
+        if: ${{ steps.check_image.outputs.exists }} == 'false'
         run: |
-          ./build.sh
+          VERSION=$(cat VERSION)
+          az acr build --registry tngodemo1cr \
+            --image ttv/wan21/wan2.1:$VERSION \
+            --file Dockerfile .

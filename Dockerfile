@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
   && pip install --no-cache-dir scipy opencv-python-headless gdown \
   && pip install --no-cache-dir tensorboard tensorboardX protobuf cython \
   && pip install --no-cache-dir imageio[ffmpeg] huggingface_hub \
+  && pip install --no-cache-dir accelerate \
   && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \
   && test -d ${MODEL_DIR} || exit 1  # Ensure model is downloaded
 
