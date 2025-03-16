@@ -6,9 +6,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME="/root/.cache/huggingface"
 ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
 ENV TORCH_HOME="/root/.cache/torch"
-ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"  # Prevents VRAM fragmentation
-ENV CUDA_LAUNCH_BLOCKING=1  # Improves stability for multi-GPU workloads
-ENV CUDA_VISIBLE_DEVICES=0,1  # Ensures 2 GPU usage by default, auto-configurable
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+ENV CUDA_LAUNCH_BLOCKING=1
+# ENV CUDA_VISIBLE_DEVICES=0,1 - Only set if wanting exactly just 2 and no more GPUs even with machine with higher number of GPUs! Comment out to use all GPUs
 
 # Install System Dependencies & Python Libraries
 RUN apt-get update && apt-get install -y \
