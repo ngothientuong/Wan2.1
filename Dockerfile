@@ -7,40 +7,23 @@ ENV HF_HOME="/root/.cache/huggingface"
 ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
 ENV TORCH_HOME="/root/.cache/torch"
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-# CUDA_LAUNCH_BLOCKING=1: Useful for debugging but slows execution in production. For optimal performance, set this to 0.
-ENV CUDA_LAUNCH_BLOCKING=1
-# ENV CUDA_VISIBLE_DEVICES=0,1  # Uncomment to limit GPUs (default: use all)
+ENV XFORMERS_FORCE_DISABLE_TRITON=1
+ENV TF32_MATMUL=1
+ENV CUDA_LAUNCH_BLOCKING=0
 
-# Install System Dependencies & Python Libraries
+# ENV CUDA_VISIBLE_DEVICES=0,1  # Uncomment if limiting GPUs (default: use all)
+
+# Install System Dependencies
 RUN apt-get update && apt-get install -y \
   python3-pip git wget curl libgl1-mesa-glx ffmpeg \
-  && rm -rf /var/lib/apt/lists/* \
-  \
-  # Install Required PyTorch Libraries & Dependencies
-  && pip install --no-cache-dir torch torchvision torchaudio \
-  && pip install --no-cache-dir fastapi uvicorn pydantic \
-  transformers diffusers huggingface_hub pillow tqdm ninja pyyaml \
-  easydict ftfy einops imageio dashscope torchreid numpy \
-  && pip install --no-cache-dir packaging flash-attn --no-build-isolation \
-  && pip install --no-cache-dir scipy opencv-python-headless gdown \
-  && pip install --no-cache-dir tensorboard tensorboardX protobuf cython \
-  && pip install --no-cache-dir imageio[ffmpeg] huggingface_hub accelerate \
-  \
-  # Install Performance Optimizations (Memory & Speed)
-  && pip install --no-cache-dir xformers triton deepspeed \
-  && pip install --no-cache-dir nvidia-pyindex nvidia-tensorrt \
-  && pip install --no-cache-dir bitsandbytes \
-  && pip install --no-cache-dir py3nvml \
-  && pip install --no-cache-dir fastertransformer \
-  \
-  # Enable PyTorch Native Compilation for Speed Optimization
-  && pip install --no-cache-dir torch-compile \
-  \
-  # Remove `torch-sdp-attn` (Deprecated, No Longer Needed)
-  # && pip install --no-cache-dir torch-sdp-attn \
-  \
-  # Download WAN 2.1 Model (Ensures It Exists & is Cached)
-  && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements.txt and install Python Libraries
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Pre-download WAN 2.1 Model (Ensures Fast Boot Time)
+RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \
   && test -d ${MODEL_DIR} || exit 1  # Ensure model is downloaded
 
 # Verify CUDA, Multi-GPU & PyTorch AMP Support
@@ -51,8 +34,12 @@ RUN python3 -c "import torch; print(f'Using BF16 AMP: {torch.backends.cuda.matmu
 WORKDIR /app
 COPY . /app
 
+# Copy the startup script
+COPY startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
 # Expose API Port
 EXPOSE 8000
 
-# Run FastAPI Server with Stable Multi-GPU Support
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "120", "--log-level", "debug"]
+# Run the startup script
+CMD ["/app/startup.sh"]
