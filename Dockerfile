@@ -8,15 +8,15 @@ ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
 
 # Install System Dependencies & Python Libraries in One Step
 RUN apt-get update && apt-get install -y \
-  python3-pip git wget curl libgl1-mesa-glx \
+  python3-pip git wget curl libgl1-mesa-glx ffmpeg \
   && rm -rf /var/lib/apt/lists/* \
   && pip install --no-cache-dir torch torchvision torchaudio \
   --index-url https://download.pytorch.org/whl/cu121 \
   && pip install --no-cache-dir fastapi uvicorn pydantic \
   transformers diffusers huggingface_hub pillow \
-  easydict ftfy einops imageio dashscope \
+  easydict ftfy einops imageio dashscope torchreid flash-attn \
   && pip install huggingface_hub \
-  && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main --depth 1
+  && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
 # Set Work Directory & Copy API Code
 WORKDIR /app

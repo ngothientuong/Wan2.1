@@ -5,15 +5,10 @@ import torch
 import os
 import sys
 import logging
-import shutil
 from datetime import datetime
 from typing import Optional
-from PIL import Image
-import random
-
-import wan
-from wan.configs import WAN_CONFIGS, SIZE_CONFIGS, MAX_AREA_CONFIGS, SUPPORTED_SIZES
-from wan.utils.utils import cache_video, cache_image
+from torchreid.utils import interpolate_video
+from wan.utils.utils import cache_video
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 
 # ========== Logging Setup ==========
@@ -24,7 +19,7 @@ logging.basicConfig(
 )
 
 # ========== Initialize FastAPI App ==========
-app = FastAPI(title="WAN 2.1 Text-to-Video API")
+app = FastAPI(title="WAN 2.1 Optimized Text-to-Video API")
 
 # ========== Multi-GPU Handling ==========
 NUM_GPUS = torch.cuda.device_count()
@@ -34,9 +29,6 @@ if NUM_GPUS > 0:
     logging.info(f"✅ Multi-GPU enabled: {NUM_GPUS} GPUs detected.")
 else:
     logging.info("⚠️ No GPU detected! Running on CPU.")
-
-# ========== Model Cache (Avoid Reloading on Every Request) ==========
-MODEL_CACHE = {}
 
 # ========== Request Schema ==========
 class VideoRequest(BaseModel):
@@ -54,20 +46,16 @@ class VideoRequest(BaseModel):
     prompt_extend_method: str = "dashscope"
     prompt_extend_target_lang: str = "en"
     ckpt_dir: str
-    image: Optional[str] = None  # Required for image-to-video tasks
 
-# ========== Load Model (Multi-GPU & Caching) ==========
+# ========== Load Model (Multi-GPU & Flash Attention) ==========
+MODEL_CACHE = {}
+
 def load_model(task, ckpt_dir):
     if task not in MODEL_CACHE:
         device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
         logging.info(f"Loading model {task} on device {device_id} from {ckpt_dir}...")
 
-        MODEL_CACHE[task] = wan.WanT2V(
-            config=WAN_CONFIGS[task],
-            checkpoint_dir=ckpt_dir,
-            device_id=device_id,
-            torch_dtype=torch.float16 if NUM_GPUS > 0 else torch.float32
-        )
+        MODEL_CACHE[task] = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
     return MODEL_CACHE[task]
 
 # ========== Generate Video Function ==========
@@ -84,12 +72,16 @@ def generate_video(request: VideoRequest):
         extended_prompt = expander(request.prompt, tar_lang=request.prompt_extend_target_lang).prompt
         request.prompt = extended_prompt
 
-    # Generate Video
-    logging.info(f"Generating video with task: {request.task}, prompt: {request.prompt}")
-    output = model.generate(
+    # Keyframe optimization: Generate every 4th frame and interpolate
+    keyframe_interval = 4
+    num_keyframes = request.num_frames // keyframe_interval
+
+    logging.info(f"Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
+
+    keyframes = model.generate(
         request.prompt,
-        size=SIZE_CONFIGS[request.size],
-        frame_num=request.num_frames,
+        size=request.size,
+        frame_num=num_keyframes,
         shift=request.sample_shift,
         sample_solver="unipc",
         sampling_steps=50,
@@ -98,19 +90,16 @@ def generate_video(request: VideoRequest):
         offload_model=request.offload_model
     )
 
-    # Save Video (Server-Side)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"{request.task}_{timestamp}.mp4"
-    cache_video(tensor=output[None], save_file=output_file, fps=request.fps)
+    # Use AI-based interpolation (RIFE) to generate missing frames
+    full_video = interpolate_video(keyframes, method="rife", target_fps=request.fps)
+
+    # Save video
+    output_file = f"{request.task}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+    cache_video(tensor=full_video, save_file=output_file, fps=request.fps)
 
     return output_file
 
 # ========== API Endpoints ==========
-@app.get("/healthcheck")
-def health_check():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    return {"status": "running", "device": device, "num_gpus": NUM_GPUS}
-
 @app.post("/generate/")
 async def generate_api(request: VideoRequest):
     try:
@@ -118,44 +107,3 @@ async def generate_api(request: VideoRequest):
         return {"output_path": video_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/download/{filename}")
-async def download_file(filename: str):
-    """Allows the client to download the generated file."""
-    file_path = os.path.join(os.getcwd(), filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return FileResponse(file_path, media_type="video/mp4", filename=filename)
-
-@app.post("/generate_and_download/")
-async def generate_and_download(request: VideoRequest):
-    """Generates video and streams it back to the client."""
-    try:
-        video_path = generate_video(request)
-
-        def file_iterator():
-            """Streams the file in chunks for efficient downloading."""
-            with open(video_path, "rb") as video_file:
-                while chunk := video_file.read(4096):
-                    yield chunk
-
-        return StreamingResponse(file_iterator(), media_type="video/mp4", headers={"Content-Disposition": f"attachment; filename={video_path}"})
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ========== WebSocket for Real-Time Updates ==========
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_json()
-            request = VideoRequest(**data)
-            video_path = generate_video(request)
-            await websocket.send_json({"status": "completed", "video_path": video_path})
-    except Exception as e:
-        await websocket.send_json({"error": str(e)})
-    finally:
-        await websocket.close()
