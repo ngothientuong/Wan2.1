@@ -1,0 +1,3 @@
+Keeping all the optimization needed in mind.
+The optimizations are utilization of resources (memory, GPUs, CPUs, disk i/o, etc...) and ensure video production time is under 30 min even for 	A100-80G-PCIe with 2 GPUs without losing quality for 1 hour long video
+Evaluate time for production after optimization for 2,4,8 GPUs in the same instance
