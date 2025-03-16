@@ -57,19 +57,21 @@ class VideoRequest(BaseModel):
 MODEL_CACHE = {}
 
 def load_model(task, ckpt_dir):
-    """Loads WAN 2.1 model to an available GPU or CPU."""
+    """Loads WAN 2.1 model on an available GPU or CPU."""
     if task not in MODEL_CACHE:
         device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
-        logging.info(f"Loading model {task} on device {device_id} from {ckpt_dir}...")
+        logging.info(f"🔄 Loading model {task} on device {device_id} from {ckpt_dir}...")
 
-        with torch.amp.autocast("cuda"):  # Fixing deprecated warning
-            MODEL_CACHE[task] = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
+        with torch.amp.autocast("cuda"):
+            model = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
+
+        MODEL_CACHE[task] = model  # ✅ Store model after moving to device
     return MODEL_CACHE[task]
 
 # ========== AI-Based Video Interpolation (RIFE) ==========
 def interpolate_frames(frames, target_fps):
     """Interpolates frames using OpenCV or RIFE AI interpolation if available."""
-    logging.info(f"Interpolating frames to {target_fps} FPS...")
+    logging.info(f"🎥 Interpolating frames to {target_fps} FPS...")
 
     num_frames, height, width, _ = frames.shape
     interpolated_video = []
@@ -88,14 +90,14 @@ def generate_video(request: VideoRequest):
 
     # Handle Prompt Extension
     if request.use_prompt_extend:
-        logging.info("Extending prompt...")
+        logging.info("📝 Extending prompt...")
         expander = DashScopePromptExpander(is_vl="i2v" in request.task) if request.prompt_extend_method == "dashscope" else QwenPromptExpander(is_vl="i2v" in request.task)
         request.prompt = expander(request.prompt, tar_lang=request.prompt_extend_target_lang).prompt
 
     # Keyframe Optimization: Generate every 4th frame and interpolate
     keyframe_interval = 4
     num_keyframes = request.num_frames // keyframe_interval
-    logging.info(f"Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
+    logging.info(f"⚡ Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
 
     # Multi-GPU Processing
     batch_size = max(1, num_keyframes // max(1, NUM_GPUS))
@@ -105,7 +107,7 @@ def generate_video(request: VideoRequest):
         device_id = GPU_IDS[(i // batch_size) % NUM_GPUS] if NUM_GPUS > 0 else "cpu"
         model.to(device_id)
 
-        with torch.amp.autocast("cuda"):  # Fixing deprecated warning
+        with torch.amp.autocast("cuda"):
             batch_output = model.generate(
                 request.prompt,
                 size=request.size,
@@ -128,13 +130,14 @@ def generate_video(request: VideoRequest):
     output_file = f"{request.task}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
     cache_video(tensor=torch.tensor(full_video), save_file=output_file, fps=request.fps)
 
+    logging.info(f"✅ Video saved: {output_file}")
     return output_file
 
 # ========== API Endpoints ==========
 @app.post("/generate/")
 async def generate_api(request: VideoRequest):
     try:
-        logging.info(f"Received Request: {request.dict()}")  # ✅ Fixes .json() issue
+        logging.info(f"🌐 Received Request: {request.dict()}")  # ✅ Fixes .json() issue
         video_path = generate_video(request)
         return {"output_path": video_path}
     except Exception as e:
