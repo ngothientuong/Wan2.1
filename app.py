@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import torch
 import os
@@ -31,6 +31,11 @@ if NUM_GPUS > 0:
 else:
     logging.info("⚠️ No GPU detected! Running on CPU.")
 
+# ========== Health Check Endpoint ==========
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "healthy", "gpus_available": NUM_GPUS})
+
 # ========== Request Schema ==========
 class VideoRequest(BaseModel):
     task: str
@@ -57,7 +62,8 @@ def load_model(task, ckpt_dir):
         device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
         logging.info(f"Loading model {task} on device {device_id} from {ckpt_dir}...")
 
-        MODEL_CACHE[task] = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
+        with torch.amp.autocast("cuda"):  # Fixing deprecated warning
+            MODEL_CACHE[task] = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
     return MODEL_CACHE[task]
 
 # ========== AI-Based Video Interpolation (RIFE) ==========
@@ -98,17 +104,20 @@ def generate_video(request: VideoRequest):
     for i in range(0, num_keyframes, batch_size):
         device_id = GPU_IDS[(i // batch_size) % NUM_GPUS] if NUM_GPUS > 0 else "cpu"
         model.to(device_id)
-        batch_output = model.generate(
-            request.prompt,
-            size=request.size,
-            frame_num=batch_size,
-            shift=request.sample_shift,
-            sample_solver="unipc",
-            sampling_steps=50,
-            guide_scale=request.sample_guide_scale,
-            seed=request.seed,
-            offload_model=request.offload_model
-        )
+
+        with torch.amp.autocast("cuda"):  # Fixing deprecated warning
+            batch_output = model.generate(
+                request.prompt,
+                size=request.size,
+                frame_num=batch_size,
+                shift=request.sample_shift,
+                sample_solver="unipc",
+                sampling_steps=50,
+                guide_scale=request.sample_guide_scale,
+                seed=request.seed,
+                offload_model=request.offload_model
+            )
+
         keyframes.append(batch_output)
 
     # Convert keyframes to NumPy for interpolation
