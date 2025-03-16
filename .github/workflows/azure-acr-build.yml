@@ -1,0 +1,38 @@
+name: Build and Push Docker Image to Azure
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240  # Set timeout to 4 hours
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Read version from VERSION file
+        id: get_version
+        run: echo "VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
+      - name: Check if Docker image exists
+        id: check_image
+        run: |
+          az acr repository show --name tngodemo1cr --image ttv/wan21/wan2.1:${{ env.VERSION }} || echo "Image not found"
+
+      - name: Build and push Docker image if not exists
+        if: steps.check_image.outputs.image == 'Image not found'
+        run: |
+          ./build.sh
