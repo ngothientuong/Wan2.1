@@ -10,17 +10,18 @@ ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 ENV XFORMERS_FORCE_DISABLE_TRITON=1
 ENV TF32_MATMUL=1
 ENV CUDA_LAUNCH_BLOCKING=0
+ENV PYTHONUNBUFFERED=1
 
 # ENV CUDA_VISIBLE_DEVICES=0,1  # Uncomment if limiting GPUs (default: use all)
 
-# Install System Dependencies
+# Install only essential system dependencies
 RUN apt-get update && apt-get install -y \
-  python3-pip git wget curl libgl1-mesa-glx ffmpeg \
+  python3-pip git wget curl ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements.txt and install Python Libraries
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir --prefer-binary --compile -r /app/requirements.txt
 
 # Pre-download WAN 2.1 Model (Ensures Fast Boot Time)
 RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \

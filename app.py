@@ -101,12 +101,10 @@ def generate_video(request: VideoRequest):
     start_time = time.time()
     model = load_model(request.task, request.ckpt_dir)
 
-    # ✅ Optimized Keyframe Generation
     keyframe_interval = 4
     num_keyframes = request.num_frames // keyframe_interval
     logging.info(f"⚡ Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
 
-    # ✅ Optimized Multi-GPU Processing with CUDA Streams & Graphs
     batch_size = max(1, num_keyframes // max(1, NUM_GPUS))
     keyframes = []
 
@@ -114,9 +112,7 @@ def generate_video(request: VideoRequest):
     streams = [torch.cuda.Stream(device=i) for i in GPU_IDS]
 
     for i in range(0, num_keyframes, batch_size):
-        device_id = GPU_IDS[(i // batch_size) % NUM_GPUS] if NUM_GPUS > 0 else "cpu"
-        model.to(device_id)
-
+        # Removed: model.to(device_id) - Let FSDP handle device placement
         with torch.cuda.graph(cuda_graphs[(i // batch_size) % NUM_GPUS]):
             with torch.cuda.stream(streams[(i // batch_size) % NUM_GPUS]):
                 batch_output = model.generate(
@@ -125,18 +121,14 @@ def generate_video(request: VideoRequest):
                     frame_num=batch_size,
                     shift=request.sample_shift,
                     sample_solver="unipc",
-                    sampling_steps=4,  # ✅ Optimized for speed
+                    sampling_steps=4,
                     guide_scale=request.sample_guide_scale,
                     seed=request.seed,
                     offload_model=request.offload_model
                 )
-
             keyframes.append(batch_output)
 
-    # Convert keyframes to NumPy for interpolation
     keyframes_np = np.array([frame.cpu().numpy() for frame in torch.cat(keyframes)])
-
-    # ✅ Async Save to Avoid Disk Bottleneck
     output_file = f"{request.task}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
     Thread(target=cache_video, args=(torch.tensor(keyframes_np), output_file, request.fps)).start()
 
