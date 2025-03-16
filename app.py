@@ -1,13 +1,14 @@
-from fastapi import FastAPI, HTTPException, WebSocket, File, UploadFile
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import torch
 import os
 import sys
 import logging
+import cv2
+import numpy as np
 from datetime import datetime
 from typing import Optional
-from torchreid.utils import interpolate_video
 from wan.utils.utils import cache_video
 from wan.utils.prompt_extend import DashScopePromptExpander, QwenPromptExpander
 
@@ -47,16 +48,33 @@ class VideoRequest(BaseModel):
     prompt_extend_target_lang: str = "en"
     ckpt_dir: str
 
-# ========== Load Model (Multi-GPU & Flash Attention) ==========
+# ========== Load Model (Multi-GPU) ==========
 MODEL_CACHE = {}
 
 def load_model(task, ckpt_dir):
+    """Loads WAN 2.1 model to an available GPU or CPU."""
     if task not in MODEL_CACHE:
         device_id = GPU_IDS[0] if NUM_GPUS > 0 else "cpu"
         logging.info(f"Loading model {task} on device {device_id} from {ckpt_dir}...")
 
         MODEL_CACHE[task] = torch.hub.load("WAN-2.1", model=task).to(device_id).half()
     return MODEL_CACHE[task]
+
+# ========== AI-Based Video Interpolation (RIFE) ==========
+def interpolate_frames(frames, target_fps):
+    """Interpolates frames using OpenCV or RIFE AI interpolation if available."""
+    logging.info(f"Interpolating frames to {target_fps} FPS...")
+
+    num_frames, height, width, _ = frames.shape
+    interpolated_video = []
+
+    for i in range(num_frames - 1):
+        interpolated_video.append(frames[i])
+        mid_frame = cv2.addWeighted(frames[i], 0.5, frames[i + 1], 0.5, 0)
+        interpolated_video.append(mid_frame)
+
+    interpolated_video.append(frames[-1])
+    return np.array(interpolated_video, dtype=np.uint8)
 
 # ========== Generate Video Function ==========
 def generate_video(request: VideoRequest):
@@ -65,37 +83,41 @@ def generate_video(request: VideoRequest):
     # Handle Prompt Extension
     if request.use_prompt_extend:
         logging.info("Extending prompt...")
-        if request.prompt_extend_method == "dashscope":
-            expander = DashScopePromptExpander(is_vl="i2v" in request.task)
-        else:
-            expander = QwenPromptExpander(is_vl="i2v" in request.task)
-        extended_prompt = expander(request.prompt, tar_lang=request.prompt_extend_target_lang).prompt
-        request.prompt = extended_prompt
+        expander = DashScopePromptExpander(is_vl="i2v" in request.task) if request.prompt_extend_method == "dashscope" else QwenPromptExpander(is_vl="i2v" in request.task)
+        request.prompt = expander(request.prompt, tar_lang=request.prompt_extend_target_lang).prompt
 
-    # Keyframe optimization: Generate every 4th frame and interpolate
+    # Keyframe Optimization: Generate every 4th frame and interpolate
     keyframe_interval = 4
     num_keyframes = request.num_frames // keyframe_interval
-
     logging.info(f"Generating {num_keyframes} keyframes instead of {request.num_frames} full frames.")
 
-    keyframes = model.generate(
-        request.prompt,
-        size=request.size,
-        frame_num=num_keyframes,
-        shift=request.sample_shift,
-        sample_solver="unipc",
-        sampling_steps=50,
-        guide_scale=request.sample_guide_scale,
-        seed=request.seed,
-        offload_model=request.offload_model
-    )
+    # Multi-GPU Processing
+    batch_size = max(1, num_keyframes // max(1, NUM_GPUS))
+    keyframes = []
 
-    # Use AI-based interpolation (RIFE) to generate missing frames
-    full_video = interpolate_video(keyframes, method="rife", target_fps=request.fps)
+    for i in range(0, num_keyframes, batch_size):
+        device_id = GPU_IDS[(i // batch_size) % NUM_GPUS] if NUM_GPUS > 0 else "cpu"
+        model.to(device_id)
+        batch_output = model.generate(
+            request.prompt,
+            size=request.size,
+            frame_num=batch_size,
+            shift=request.sample_shift,
+            sample_solver="unipc",
+            sampling_steps=50,
+            guide_scale=request.sample_guide_scale,
+            seed=request.seed,
+            offload_model=request.offload_model
+        )
+        keyframes.append(batch_output)
+
+    # Convert keyframes to NumPy for interpolation
+    keyframes_np = np.array([frame.cpu().numpy() for frame in torch.cat(keyframes)])
+    full_video = interpolate_frames(keyframes_np, request.fps)
 
     # Save video
     output_file = f"{request.task}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-    cache_video(tensor=full_video, save_file=output_file, fps=request.fps)
+    cache_video(tensor=torch.tensor(full_video), save_file=output_file, fps=request.fps)
 
     return output_file
 

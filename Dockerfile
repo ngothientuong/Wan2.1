@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y \
   transformers diffusers huggingface_hub pillow \
   easydict ftfy einops imageio dashscope torchreid \
   && pip install --no-cache-dir packaging \
-  && pip install --no-cache-dir flash-attn \
+  && pip install --no-cache-dir flash-attn opencv-python-headless gdown tensorboard \
   && pip install huggingface_hub \
   && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
