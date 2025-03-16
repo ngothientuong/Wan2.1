@@ -4,7 +4,7 @@
 # Read the version from the version.txt file
 VERSION=$(cat VERSION)
 
-source ${HOME}/ngo/projects/personal/.env_tngo-ai-svcs
+source ${HOME}/ngo/projects/personal/profiles/.env_tngo-ai-svcs
 source ${HOME}/.bashrc
 azurelogin
 # Build the Docker image with the specified version

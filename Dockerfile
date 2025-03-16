@@ -7,8 +7,9 @@ ENV HF_HOME="/root/.cache/huggingface"
 ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
 ENV TORCH_HOME="/root/.cache/torch"
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+# CUDA_LAUNCH_BLOCKING=1: Useful for debugging but slows execution in production. For optimal performance, set this to 0.
 ENV CUDA_LAUNCH_BLOCKING=1
-# ENV CUDA_VISIBLE_DEVICES=0,1 - Only set if wanting exactly just 2 and no more GPUs even with machine with higher number of GPUs! Comment out to use all GPUs
+# ENV CUDA_VISIBLE_DEVICES=0,1  # Uncomment to limit GPUs (default: use all)
 
 # Install System Dependencies & Python Libraries
 RUN apt-get update && apt-get install -y \
@@ -32,9 +33,11 @@ RUN apt-get update && apt-get install -y \
   && pip install --no-cache-dir py3nvml \
   && pip install --no-cache-dir fastertransformer \
   \
-  # Enable PyTorch Native Compilation & Flash Attention for Speed
-  && pip install --no-cache-dir torch-sdp-attn \
+  # Enable PyTorch Native Compilation for Speed Optimization
   && pip install --no-cache-dir torch-compile \
+  \
+  # Remove `torch-sdp-attn` (Deprecated, No Longer Needed)
+  # && pip install --no-cache-dir torch-sdp-attn \
   \
   # Download WAN 2.1 Model (Ensures It Exists & is Cached)
   && huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \
