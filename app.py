@@ -10,7 +10,6 @@ import imageio_ffmpeg as ffmpeg
 from wan import WanT2V
 from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
 from wan.utils.utils import cache_video, str2bool
-import rife_interp  # Optical Flow interpolation
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +28,7 @@ def load_model(task, ckpt_dir):
         config = WAN_CONFIGS[task]
         model = WanT2V(config=config, checkpoint_dir=ckpt_dir).to(DEVICE).half()
 
-        # Enable TensorRT optimizations if available
+        # Enable TensorRT optimizations
         model = torch.compile(model, backend="tensorrt")
 
         MODEL_CACHE[task] = model
@@ -38,7 +37,7 @@ def load_model(task, ckpt_dir):
 class VideoRequest(BaseModel):
     task: str
     prompt: str
-    size: str = "1280*720"  # ✅ Matches WAN 2.1 prompt format
+    size: str = "1280*720"  # ✅ Matches WAN 2.1 generate.py format
     num_frames: int = 320  # ✅ Default 20 seconds at 16 FPS
     fps: int = 16
     seed: int = 42
@@ -59,8 +58,12 @@ def save_video_async(frames, output_file, fps):
         writer.send(frame)
     writer.close()
 
+def interpolate_frames(keyframes, interval):
+    """Temporary fallback method for frame interpolation."""
+    return [frame for frame in keyframes for _ in range(interval)]  # No Optical Flow yet
+
 def generate_video(request: VideoRequest):
-    """Optimized video generation using WAN 2.1 models with interpolation."""
+    """Optimized video generation using WAN 2.1 models."""
     start_time = time.time()
     torch.manual_seed(request.seed)
 
@@ -88,8 +91,8 @@ def generate_video(request: VideoRequest):
             )
         keyframes.extend(batch_frames)
 
-    # Apply Optical Flow Interpolation (RIFE)
-    interpolated_frames = rife_interp.interpolate(keyframes, times=keyframe_interval)
+    # Apply Keyframe Duplication (Temporary Fix)
+    interpolated_frames = interpolate_frames(keyframes, keyframe_interval)
 
     # Save video asynchronously
     output_file = request.save_file if request.save_file else f"output_{int(time.time())}.mp4"
