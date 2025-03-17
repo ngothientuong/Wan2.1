@@ -1,46 +1,38 @@
-# Use NVIDIA’s Latest PyTorch Image (CUDA 12.3 + CuDNN 8.9)
-FROM nvcr.io/nvidia/pytorch:24.01-py3
+# Use NVIDIA PyTorch image with CUDA 12.4 and cuDNN 8.9 for best compatibility
+FROM nvcr.io/nvidia/pytorch:24.02-py3
 
-# Set Environment Variables for Performance Optimization
+# Set environment variables for optimization
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME="/root/.cache/huggingface"
 ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
-ENV TORCH_HOME="/root/.cache/torch"
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
-ENV XFORMERS_FORCE_DISABLE_TRITON=1
-ENV TF32_MATMUL=1
 ENV CUDA_LAUNCH_BLOCKING=0
-ENV PYTHONUNBUFFERED=1
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV CUDA_HOME=/usr/local/cuda
 
-# ENV CUDA_VISIBLE_DEVICES=0,1  # Uncomment if limiting GPUs (default: use all)
-
-# Install only essential system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-  python3-pip git wget curl ffmpeg \
+  ffmpeg libgl1-mesa-glx git wget curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements.txt and install Python Libraries
+# Install base Python dependencies
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --prefer-binary --compile -r /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Pre-download WAN 2.1 Model (Ensures Fast Boot Time)
-RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main \
-  && test -d ${MODEL_DIR} || exit 1  # Ensure model is downloaded
+# Install additional optimization dependencies
+COPY additional-requirements.txt /app/additional-requirements.txt
+RUN pip install --no-cache-dir -r /app/additional-requirements.txt
 
-# Verify CUDA, Multi-GPU & PyTorch AMP Support
-RUN python3 -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()} | GPUs: {torch.cuda.device_count()}')"
-RUN python3 -c "import torch; print(f'Using BF16 AMP: {torch.backends.cuda.matmul.allow_tf32}')"
+# Pre-download WAN 2.1 model to avoid runtime delays
+RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
-# Set Work Directory & Copy API Code
+# Set working directory and copy application files
 WORKDIR /app
 COPY . /app
 
-# Copy the startup script
-COPY startup.sh /app/startup.sh
-RUN chmod +x /app/startup.sh
-
-# Expose API Port
+# Expose FastAPI port
 EXPOSE 8000
 
-# Run the startup script
-CMD ["/app/startup.sh"]
+# Start FastAPI server
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

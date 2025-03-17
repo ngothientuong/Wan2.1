@@ -1,3 +1,18 @@
 Keeping all the optimization needed in mind.
 The optimizations are utilization of resources (memory, GPUs, CPUs, disk i/o, etc...) and ensure video production time is under 30 min even for 	A100-80G-PCIe with 2 GPUs without losing quality for 1 hour long video
 Evaluate time for production after optimization for 2,4,8 GPUs in the same instance
+
+
+
+
+Let's step back!
+This repo is fork from WAN 2.1: https://github.com/Wan-Video/Wan2.1/blob/main/requirements.txt
+DockerFile, app.py, build.sh, requirements.txt are all from me
+Here is WAN 2.1 source code: https://github.com/Wan-Video/Wan2.1
+
+Dig through every file in both repo, and help me comes up with correct contents for additional-requirements.txt ,DockerFile, app.py, build.sh to ensure optimization and WORKING container, working app.py in A100-80G-PCIe!
+Keeping all the optimization needed in mind.
+The optimizations are utilization of resources (memory, GPUs, CPUs, disk i/o, etc...) and ensure video production time is under 30 min even for 	A100-80G-PCIe with 2 GPUs without losing quality for 1 hour long video
+Evaluate time for production after optimization for 2,4,8 GPUs in the same instance
+
+Remember to also dig up issues, optimization tips out there as well!

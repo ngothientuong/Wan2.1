@@ -1,0 +1,11 @@
+python3 generate.py \
+  --task t2v-14B \
+  --prompt "Two baby tortoise making buns, then they fight for the buns after they are finished" \
+  --size 1280*720 \
+  --frame_num 160 \
+  --sample_steps 4 \
+  --sample_shift 3 \
+  --sample_guide_scale 3.0 \
+  --base_seed 42 \
+  --offload_model=True \
+  --ckpt_dir "/models/Wan2.1-T2V-14B"
