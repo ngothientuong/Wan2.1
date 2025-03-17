@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+  workflow_dispatch:  # Add this line to enable manual triggering
 
 jobs:
   build:
@@ -43,4 +44,4 @@ jobs:
           az acr build --registry tngodemo1cr \
             --image ttv/wan21/wan2.1:$VERSION \
             --file Dockerfile . \
-            --timeout 7200  # Increase timeout to 4 hours
+            --timeout 14400  # Increase timeout to 4 hours
