@@ -41,3 +41,4 @@ bitsandbytes
 py3nvml
 fastertransformer
 typer<0.10.0,>=0.3.0  # Adjusted to avoid conflict with spacy and weasel
+optree>=0.13.0
