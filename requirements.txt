@@ -1,6 +1,6 @@
-torch
-torchvision
-torchaudio
+torch==2.3.0
+torchvision==0.20.0
+torchaudio==0.10.0
 opencv-python>=4.9.0.80
 diffusers>=0.31.0
 transformers>=4.49.0
@@ -12,9 +12,9 @@ easydict
 ftfy
 dashscope
 imageio-ffmpeg
-flash_attn
+flash_attn==2.3.0  # Pin to a specific version
 gradio>=5.0.0
-numpy>=1.23.5
+numpy>=1.23.5,<2
 fastapi
 uvicorn
 pydantic
@@ -40,4 +40,4 @@ nvidia-tensorrt
 bitsandbytes
 py3nvml
 fastertransformer
-typer>=0.12
+typer<0.10.0,>=0.3.0  # Adjusted to avoid conflict with spacy and weasel
