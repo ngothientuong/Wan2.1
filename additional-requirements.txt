@@ -1,5 +1,5 @@
 # Optimization libraries for WAN 2.1 on A100 GPUs
-flash-attn>=2.6.3        # Optimized transformer attention (Use latest!)
+flash-attn==2.3.3        # Optimized transformer attention (Use compatible version)
 xformers>=0.0.26.post1   # Faster attention ops
 bitsandbytes>=0.43.3     # 8-bit quantization
 torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility
