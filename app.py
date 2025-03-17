@@ -5,12 +5,12 @@ import logging
 import time
 import os
 from threading import Thread
-import rife_interp  # Optical Flow interpolation
 import numpy as np
 import imageio_ffmpeg as ffmpeg
 from wan import WanT2V
-from wan.configs import WAN_CONFIGS
-from wan.utils.utils import cache_video
+from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
+from wan.utils.utils import cache_video, str2bool
+import rife_interp  # Optical Flow interpolation
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +43,13 @@ class VideoRequest(BaseModel):
     fps: int = 16
     seed: int = 42
     ckpt_dir: str
+    offload_model: bool = False
+    t5_cpu: bool = False
+    sample_steps: int = 4
+    sample_shift: float = 3.0
+    sample_guide_scale: float = 3.0
+    save_file: str = None
+    image: str = None  # Image-to-Video input support
 
 def save_video_async(frames, output_file, fps):
     """Save video using FFmpeg asynchronously to prevent disk I/O bottlenecks."""
@@ -85,7 +92,7 @@ def generate_video(request: VideoRequest):
     interpolated_frames = rife_interp.interpolate(keyframes, times=keyframe_interval)
 
     # Save video asynchronously
-    output_file = f"output_{int(time.time())}.mp4"
+    output_file = request.save_file if request.save_file else f"output_{int(time.time())}.mp4"
     Thread(target=save_video_async, args=(interpolated_frames, output_file, request.fps)).start()
 
     elapsed = time.time() - start_time

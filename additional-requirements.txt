@@ -2,6 +2,5 @@
 xformers==0.0.26.post1   # Efficient transformer attention
 bitsandbytes==0.43.3     # 8-bit and 4-bit quantization for speed
 flash-attn==2.6.3        # Faster transformer inference
-tensorrt==10.5.0         # NVIDIA TensorRT for inference acceleration
-torch-tensorrt==2.1.0    # PyTorch-TensorRT compatibility
+torch-tensorrt==2.6.0    # PyTorch-TensorRT compatibility
 rife-interp==1.2.0       # Optical Flow frame interpolation

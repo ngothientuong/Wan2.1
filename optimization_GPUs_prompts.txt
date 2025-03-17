@@ -9,7 +9,7 @@ Now, really dig up both repos and review EVERY FILE from both
 Mine: https://github.com/ngothientuong/Wan2.1
 Source code: https://github.com/Wan-Video/Wan2.1
 
-Tell me again, if I'm fully abiding by the source code for app.py, DockerFile, additional-requirements? Is there any other files I'm missing? Remember, this is supposed to ensure optimizations!
+Tell me again, if I'm fully abiding by the source code for app.py, DockerFile, additional-requirements? Is there any other files or parameters I'm missing? Remember, this is supposed to ensure optimizations!
 Keeping all the optimization needed in mind.
 The optimizations are utilization of resources (memory, GPUs, CPUs, disk i/o, etc...) and ensure video production time is under 30 min even for 	A100-80G-PCIe with 2 GPUs without losing quality for 1 hour long video
 Evaluate time for production after optimization for 2,4,8 GPUs in the same instance
