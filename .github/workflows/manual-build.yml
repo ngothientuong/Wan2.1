@@ -1,4 +1,4 @@
-name: Build and Push Docker Image to Azure
+name: Manual Build and Push Docker Image to Azure
 
 on:
   push:
