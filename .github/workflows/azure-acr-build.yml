@@ -3,7 +3,7 @@ name: Build and Push Docker Image to Azure
 on:
   push:
     branches:
-      - main
+      - develop
 
 jobs:
   build:
