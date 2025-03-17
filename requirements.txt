@@ -1,6 +1,6 @@
-torch>=2.3.0
-torchvision>=0.20.0
-torchaudio>=0.10.0
+torch
+torchvision
+torchaudio
 opencv-python>=4.9.0.80
 diffusers>=0.31.0
 transformers>=4.49.0
@@ -12,9 +12,9 @@ easydict
 ftfy
 dashscope
 imageio-ffmpeg
-flash-attn>=1.0.0
+flash_attn
 gradio>=5.0.0
-numpy>=1.23.5,<2
+numpy>=1.23.5
 fastapi
 uvicorn
 pydantic
@@ -32,7 +32,7 @@ tensorboard
 tensorboardX
 protobuf
 cython
-xformers>=0.0.23
+xformers
 triton
 deepspeed
 nvidia-pyindex
@@ -40,4 +40,4 @@ nvidia-tensorrt
 bitsandbytes
 py3nvml
 fastertransformer
-typer>=0.3.0,<0.10.0
+typer>=0.12
