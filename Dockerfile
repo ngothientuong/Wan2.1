@@ -15,7 +15,7 @@ ENV PYTHONUNBUFFERED=1
 # Install System Dependencies (Ensure CUDA Development Tools are Installed)
 RUN apt-get update && apt-get install -y \
   python3-pip git wget curl ffmpeg libgl1-mesa-glx \
-  ninja build-essential cmake \
+  ninja-build build-essential cmake \
   && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install core dependencies
