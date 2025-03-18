@@ -22,7 +22,16 @@ Here are the publically accessible repo:
 Mine: https://github.com/ngothientuong/Wan2.1
 Source code: https://github.com/Wan-Video/Wan2.1
 Is my `app.py` good now? It abide by source code in folder WAN2.1-source-code and the base Docker image , optimize for time, speed, resource & quality, utilize all features similarly like in generate.py params?
-
+Does `app.py` also include all of these below features?
+✅ Confirmed Features in Wan2.1
+📜 Text-to-Video (T2V) → Generate videos from text prompts.
+🖼️ Image-to-Video (I2V) → Convert static images into dynamic videos.
+🖍️ Text-to-Image (T2I) → Create static images from text prompts.
+🎵 Video-to-Audio (V2A) → Generate sound effects & background music for videos.
+📝 Visual Text Generation → Render English & Chinese text within videos.
+(Not needed now, don't include) 📖 Prompt Extension → Enhance text prompts using Local Qwen or DashScope API.
+⚙️ Configurable Parameters → Video resolution, frame count, and sampling settings (e.g., 1280x720, 832x480).
+These are implemented in the generate.py script, which serves as the main interface for generation tasks, controlled via command-line arguments like --task, --size, and --frame_num.
 
 
 requirements.txt
