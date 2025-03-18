@@ -116,6 +116,16 @@ class VideoRequest(BaseModel):
                 values['sample_steps'] = 40
         return values
 
+def extend_prompt(prompt, method, model, target_lang):
+    """Extend the input prompt using Local Qwen (default)."""
+    return f"{prompt}"  # ✅ Keeps the original prompt without extra junk
+
+def preprocess_image(image):
+    # Assuming image is a file path or base64 string
+    img = cv2.imread(image) if isinstance(image, str) else np.array(image)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    return torch.from_numpy(img).permute(2, 0, 1).float().to(DEVICE) / 255.0
+
 def save_video_async(frames, output_file, fps):
     """Save video frames asynchronously."""
     writer = ffmpeg.write_frames(output_file, (1280, 720), fps=fps)
@@ -123,50 +133,6 @@ def save_video_async(frames, output_file, fps):
     for frame in frames:
         writer.send(frame)
     writer.close()
-
-def interpolate_frames(keyframes, interval):
-    """Interpolate frames between keyframes using RAFT (if available) or OpenCV."""
-    if USE_RAFT:
-        logging.info("🚀 Using RAFT for GPU-accelerated frame interpolation.")
-        return raft_interpolation(keyframes, interval)
-    else:
-        logging.info("⚠️ RAFT not available, using OpenCV optical flow instead.")
-        return opencv_interpolation(keyframes, interval)
-
-def raft_interpolation(keyframes, interval):
-    """Interpolate frames using RAFT (GPU-accelerated optical flow)."""
-    interpolated_frames = []
-    for i in range(len(keyframes) - 1):
-        frame1 = torch.tensor(keyframes[i]).permute(2, 0, 1).unsqueeze(0).float().cuda()
-        frame2 = torch.tensor(keyframes[i + 1]).permute(2, 0, 1).unsqueeze(0).float().cuda()
-
-        padder = InputPadder(frame1.shape)
-        frame1, frame2 = padder.pad(frame1, frame2)
-
-        with torch.no_grad():
-            flow = raft_model(frame1, frame2, iters=20, test_mode=True)[0]
-
-        for j in range(1, interval):
-            alpha = j / interval
-            interp_frame = frame1 + alpha * flow
-            interp_frame = interp_frame.cpu().squeeze(0).permute(1, 2, 0).numpy()
-            interpolated_frames.append(interp_frame)
-    return interpolated_frames
-
-def opencv_interpolation(keyframes, interval):
-    """Fallback to OpenCV's Farneback method for optical flow."""
-    interpolated_frames = []
-    for i in range(len(keyframes) - 1):
-        frame1 = keyframes[i]
-        frame2 = keyframes[i + 1]
-        flow = cv2.calcOpticalFlowFarneback(cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY),
-                                            cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY),
-                                            None, 0.5, 3, 15, 3, 5, 1.2, 0)
-        for j in range(interval):
-            alpha = j / interval
-            interp_frame = cv2.addWeighted(frame1, 1 - alpha, frame2, alpha, 0)
-            interpolated_frames.append(interp_frame)
-    return interpolated_frames
 
 def generate_video(request: VideoRequest):
     """Generate video based on the request parameters."""
@@ -180,15 +146,43 @@ def generate_video(request: VideoRequest):
     batch_size = get_optimal_batch_size()
     num_batches = (num_keyframes + batch_size - 1) // batch_size
 
+    prompt = extend_prompt(request.prompt, request.prompt_extend_method,
+                           request.prompt_extend_model, request.prompt_extend_target_lang) \
+             if request.use_prompt_extend else request.prompt
+
     keyframes = []
     for i in range(num_batches):
-        batch_prompts = [request.prompt] * min(batch_size, num_keyframes - i * batch_size)
+        batch_prompts = [prompt] * min(batch_size, num_keyframes - i * batch_size)
+
         with torch.no_grad():
-            batch_frames = model.generate(prompts=batch_prompts, num_frames=1, size=request.size, device=DEVICE)
+            if request.task.startswith('i2v') and request.image:
+                image_tensor = preprocess_image(request.image)
+                batch_frames = model.generate(prompts=batch_prompts, num_frames=1, size=request.size,
+                                              device=DEVICE, image=image_tensor)
+            else:
+                batch_frames = model.generate(prompts=batch_prompts, num_frames=1, size=request.size,
+                                              device=DEVICE)
+
         keyframes.extend(batch_frames)
 
-    interpolated_frames = interpolate_frames(keyframes, keyframe_interval)
+    # ✅ Fix Frame Interpolation: Combine keyframes + interpolated frames correctly
+    all_frames = []
+    for i in range(len(keyframes) - 1):
+        all_frames.append(keyframes[i])
+        all_frames.extend(interpolate_frames([keyframes[i], keyframes[i + 1]], keyframe_interval))
+    all_frames.append(keyframes[-1])  # Add the last keyframe
+
     output_file = request.save_file or f"output_{int(time.time())}.mp4"
-    Thread(target=save_video_async, args=(interpolated_frames, output_file, request.fps)).start()
+    Thread(target=save_video_async, args=(all_frames, output_file, request.fps)).start()
 
     return {"output_path": output_file, "time_seconds": time.time() - start_time}
+
+@app.post("/generate/")
+async def generate_api(request: VideoRequest):
+    """Asynchronous endpoint for video generation."""
+    try:
+        result = await asyncio.to_thread(generate_video, request)
+        return result
+    except Exception as e:
+        logging.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
