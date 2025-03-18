@@ -4,18 +4,363 @@ Evaluate time for production after optimization for 2,4,8 GPUs in the same insta
 
 
 
-
 Now, really dig up both repos and review EVERY FILE from both
 Mine: https://github.com/ngothientuong/Wan2.1
 Source code: https://github.com/Wan-Video/Wan2.1
 
 Tell me again, if I'm fully abiding by the source code for app.py, DockerFile, additional-requirements? Is there any other files or parameters I'm missing? Remember, this is supposed to ensure optimizations!
+Will install them from precompiled source and isolate them helps avoid incompability? Will they work on the base image I provided?
 Keeping all the optimization needed in mind.
 The optimizations are utilization of resources (memory, GPUs, CPUs, disk i/o, etc...) and ensure video production time is under 30 min even for 	A100-80G-PCIe with 2 GPUs without losing quality for 1 hour long video
 Ensure no packages incompability nor conflicts and check against what's from the base images as well
 Evaluate time for production after optimization for 2,4,8 GPUs in the same instance
 
-Important: Do not fucking assume anything or generate something from your general understanding like last time! Go do fucking review on every file!
+Important: Do not assume anything or generate something from your general understanding like last time! Go do review on every file to prove you're better than other models. They've been giving better reponse and actually review every file and didn't blame on resource intensity on their end!
+Check files additional-requirements, app.py, DockerFile, and source file requirements.txt as well there , see if anything we can speed up the install as well as making sure they are compatible and utilize all features in source generate.py
+
+Here are the publically accessible repo:
+Mine: https://github.com/ngothientuong/Wan2.1
+Source code: https://github.com/Wan-Video/Wan2.1
+Is my `app.py` good now? It abide by source code in folder WAN2.1-source-code and the base Docker image , optimize for time, speed, resource & quality, utilize all features similarly like in generate.py params?
 
 
+
+requirements.txt
+```
+# Base requirements
+torch>=2.4.0
+torchvision>=0.19.0
+opencv-python>=4.9.0.80
+diffusers>=0.31.0
+transformers>=4.49.0
+tokenizers>=0.20.3
+accelerate>=1.1.1
+tqdm
+imageio
+easydict
+ftfy
+dashscope
+imageio-ffmpeg
+gradio>=5.0.0
+numpy>=1.23.5,<2
+
+# Additional requirements for optimization
+flash_attn=2.3.3
+xformers>=0.0.26.post1   # Faster attention ops
+bitsandbytes>=0.43.3     # 8-bit quantization
+torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility
+deepspeed>=0.10.0        # Multi-GPU training & inference
+triton>=2.1.0            # Kernel fusion optimization
+nvidia-pyindex           # Required for NVIDIA package indexing
+py3nvml                  # GPU monitoring tools
+fastertransformer        # NVIDIA’s Transformer optimization lib (optional)
+```
+
+generate.py:
+```
+parser = argparse.ArgumentParser(
+        description="Generate a image or video from a text prompt or image using Wan"
+    )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="t2v-14B",
+        choices=list(WAN_CONFIGS.keys()),
+        help="The task to run.")
+    parser.add_argument(
+        "--size",
+        type=str,
+        default="1280*720",
+        choices=list(SIZE_CONFIGS.keys()),
+        help="The area (width*height) of the generated video. For the I2V task, the aspect ratio of the output video will follow that of the input image."
+    )
+    parser.add_argument(
+        "--frame_num",
+        type=int,
+        default=None,
+        help="How many frames to sample from a image or video. The number should be 4n+1"
+    )
+    parser.add_argument(
+        "--ckpt_dir",
+        type=str,
+        default=None,
+        help="The path to the checkpoint directory.")
+    parser.add_argument(
+        "--offload_model",
+        type=str2bool,
+        default=None,
+        help="Whether to offload the model to CPU after each model forward, reducing GPU memory usage."
+    )
+    parser.add_argument(
+        "--ulysses_size",
+        type=int,
+        default=1,
+        help="The size of the ulysses parallelism in DiT.")
+    parser.add_argument(
+        "--ring_size",
+        type=int,
+        default=1,
+        help="The size of the ring attention parallelism in DiT.")
+    parser.add_argument(
+        "--t5_fsdp",
+        action="store_true",
+        default=False,
+        help="Whether to use FSDP for T5.")
+    parser.add_argument(
+        "--t5_cpu",
+        action="store_true",
+        default=False,
+        help="Whether to place T5 model on CPU.")
+    parser.add_argument(
+        "--dit_fsdp",
+        action="store_true",
+        default=False,
+        help="Whether to use FSDP for DiT.")
+    parser.add_argument(
+        "--save_file",
+        type=str,
+        default=None,
+        help="The file to save the generated image or video to.")
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default=None,
+        help="The prompt to generate the image or video from.")
+    parser.add_argument(
+        "--use_prompt_extend",
+        action="store_true",
+        default=False,
+        help="Whether to use prompt extend.")
+    parser.add_argument(
+        "--prompt_extend_method",
+        type=str,
+        default="local_qwen",
+        choices=["dashscope", "local_qwen"],
+        help="The prompt extend method to use.")
+    parser.add_argument(
+        "--prompt_extend_model",
+        type=str,
+        default=None,
+        help="The prompt extend model to use.")
+    parser.add_argument(
+        "--prompt_extend_target_lang",
+        type=str,
+        default="zh",
+        choices=["zh", "en"],
+        help="The target language of prompt extend.")
+    parser.add_argument(
+        "--base_seed",
+        type=int,
+        default=-1,
+        help="The seed to use for generating the image or video.")
+    parser.add_argument(
+        "--image",
+        type=str,
+        default=None,
+        help="The image to generate the video from.")
+    parser.add_argument(
+        "--sample_solver",
+        type=str,
+        default='unipc',
+        choices=['unipc', 'dpm++'],
+        help="The solver used to sample.")
+    parser.add_argument(
+        "--sample_steps", type=int, default=None, help="The sampling steps.")
+    parser.add_argument(
+        "--sample_shift",
+        type=float,
+        default=None,
+        help="Sampling shift factor for flow matching schedulers.")
+    parser.add_argument(
+        "--sample_guide_scale",
+        type=float,
+        default=5.0,
+        help="Classifier free guidance scale.")
+
+    args = parser.parse_args()
+```
+Dockerfile:
+```
+# Use NVIDIA’s Latest PyTorch Image (Ensure CUDA version matches your system)
+FROM nvcr.io/nvidia/pytorch:24.01-py3
+
+# Set Environment Variables for Performance Optimization
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HF_HOME="/root/.cache/huggingface"
+ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
+ENV TORCH_HOME="/root/.cache/torch"
+ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+ENV XFORMERS_FORCE_DISABLE_TRITON=1
+ENV TF32_MATMUL=1
+ENV CUDA_LAUNCH_BLOCKING=0
+ENV PYTHONUNBUFFERED=1
+
+# Install System Dependencies (Ensure CUDA Development Tools are Installed)
+RUN apt-get update && apt-get install -y \
+  python3-pip git wget curl ffmpeg libgl1-mesa-glx \
+  ninja-build build-essential cmake \
+  && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and install core dependencies
+RUN pip install --upgrade pip setuptools wheel packaging
+
+# Copy Requirements Files
+COPY requirements.txt /app/requirements.txt
+COPY additional-requirements.txt /app/additional-requirements.txt
+
+# Install Python Dependencies (Using Cached Layers)
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Install Flash-Attn with CUDA Compatibility
+RUN pip install https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.0.6/flash_attn-2.6.3+cu124torch2.5-cp312-cp312-linux_x86_64.whl
+
+# Pre-download WAN 2.1 Model
+RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
+
+# Set Working Directory & Copy Application Files
+WORKDIR /app
+COPY . /app
+
+# Expose API Port
+EXPOSE 8000
+
+# Run Application
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+```
+
+app.py
+```
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import torch
+import torch.distributed as dist
+import torch.nn as nn
+import logging
+import time
+import os
+from threading import Thread
+import cv2
+import numpy as np
+import imageio_ffmpeg as ffmpeg
+from wan import WanT2V
+from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
+
+logging.basicConfig(level=logging.INFO)
+app = FastAPI()
+
+NUM_GPUS = torch.cuda.device_count()
+DEVICE = "cuda" if NUM_GPUS > 0 else "cpu"
+
+MODEL_CACHE = {}
+
+def load_model(task, ckpt_dir, ulysses_size=1, ring_size=1, t5_fsdp=False, dit_fsdp=False):
+    key = (task, ulysses_size, ring_size, t5_fsdp, dit_fsdp)
+    if key not in MODEL_CACHE:
+        logging.info(f"🔄 Loading {task} model on {DEVICE}...")
+        config = WAN_CONFIGS[task]
+        model = WanT2V(config=config, checkpoint_dir=ckpt_dir, ulysses_size=ulysses_size, ring_size=ring_size).to(DEVICE).half()
+        model = torch.compile(model, backend="tensorrt")
+        if NUM_GPUS > 1:
+            model = nn.DataParallel(model)  # Or use DistributedDataParallel with process group
+        MODEL_CACHE[key] = model
+    return MODEL_CACHE[key]
+
+class VideoRequest(BaseModel):
+    task: str
+    prompt: str
+    size: str = "1280*720"
+    num_frames: int = 320
+    fps: int = 16
+    seed: int = 42
+    ckpt_dir: str
+    offload_model: bool = False
+    t5_cpu: bool = False
+    t5_fsdp: bool = False
+    dit_fsdp: bool = False
+    ulysses_size: int = 1
+    ring_size: int = 1
+    sample_solver: str = "unipc"
+    sample_steps: int = 4
+    sample_shift: float = 3.0
+    sample_guide_scale: float = 3.0
+    save_file: str = None
+    image: str = None
+    use_prompt_extend: bool = False
+    prompt_extend_method: str = "local_qwen"
+    prompt_extend_model: str = None
+    prompt_extend_target_lang: str = "zh"
+
+def save_video_async(frames, output_file, fps):
+    writer = ffmpeg.write_frames(output_file, (1280, 720), fps=fps)
+    writer.send(None)
+    for frame in frames:
+        writer.send(frame)
+    writer.close()
+
+def interpolate_frames(keyframes, interval):
+    interpolated_frames = []
+    for i in range(len(keyframes) - 1):
+        frame1 = keyframes[i]
+        frame2 = keyframes[i + 1]
+        flow = cv2.calcOpticalFlowFarneback(cv2.cvtColor(frame1, cv2.COLOR_RGB2GRAY),
+                                            cv2.cvtColor(frame2, cv2.COLOR_RGB2GRAY),
+                                            None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        for j in range(interval):
+            alpha = j / interval
+            interp_frame = cv2.addWeighted(frame1, 1 - alpha, frame2, alpha, 0)
+            interpolated_frames.append(interp_frame)
+    return interpolated_frames
+
+def generate_video(request: VideoRequest):
+    start_time = time.time()
+    torch.manual_seed(request.seed)
+
+    model = load_model(request.task, request.ckpt_dir, request.ulysses_size, request.ring_size, request.t5_fsdp, request.dit_fsdp)
+
+    keyframe_interval = 30  # Adjustable for optimization
+    num_keyframes = request.num_frames // keyframe_interval
+    batch_size = 64 if NUM_GPUS > 1 else 32
+    num_batches = (num_keyframes + batch_size - 1) // batch_size
+
+    keyframes = []
+    for i in range(num_batches):
+        batch_start = i * batch_size
+        batch_end = min((i + 1) * batch_size, num_keyframes)
+        batch_prompts = [request.prompt] * (batch_end - batch_start)
+
+        with torch.no_grad():
+            batch_frames = model.generate(
+                prompts=batch_prompts,
+                num_frames=1,
+                size=request.size,
+                device=DEVICE,
+                offload_model=request.offload_model,
+                t5_cpu=request.t5_cpu,
+                sample_solver=request.sample_solver,
+                sample_steps=request.sample_steps,
+                sample_shift=request.sample_shift,
+                sample_guide_scale=request.sample_guide_scale
+            )
+        keyframes.extend(batch_frames)
+
+    interpolated_frames = interpolate_frames(keyframes, keyframe_interval)
+    output_file = request.save_file or f"output_{int(time.time())}.mp4"
+    Thread(target=save_video_async, args=(interpolated_frames, output_file, request.fps)).start()
+
+    elapsed = time.time() - start_time
+    logging.info(f"✅ Video generated in {elapsed:.2f} seconds")
+    return {"output_path": output_file, "time_seconds": elapsed}
+
+@app.post("/generate/")
+async def generate_api(request: VideoRequest):
+    try:
+        return generate_video(request)
+    except Exception as e:
+        logging.error(f"❌ Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if NUM_GPUS > 1:
+    dist.init_process_group(backend="nccl")
+
+```
 
