@@ -1,5 +1,5 @@
 ## Core Requirements
-torch==2.4.1  # Locked in for flash_attn compatibility
+torch>=2.6.0,<2.7.0  # Locked in for flash_attn compatibility
 torchvision>=0.19.0
 opencv-python>=4.9.0.80
 diffusers>=0.31.0

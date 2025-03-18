@@ -1,5 +1,5 @@
 # ✅ Best NVIDIA image for PyTorch 2.4 + CUDA 12.3
-FROM nvcr.io/nvidia/pytorch:24.01-py3
+FROM nvcr.io/nvidia/pytorch:24.06-py3
 
 # Set Environment Variables for Performance Optimization
 ENV DEBIAN_FRONTEND=noninteractive
@@ -49,7 +49,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN pip uninstall -y flash-attn
 
 # ✅ Install the correct FlashAttention wheel (CUDA 12.3, PyTorch 2.4)
-RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
 # Clone & Install RAFT from Source
 RUN pip install --no-deps git+https://github.com/princeton-vl/RAFT.git
