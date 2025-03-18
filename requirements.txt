@@ -1,4 +1,4 @@
-## From Source
+## Core Requirements
 torch>=2.4.0
 torchvision>=0.19.0
 opencv-python>=4.9.0.80
@@ -10,20 +10,19 @@ tqdm
 imageio
 easydict
 ftfy
-dashscope
 imageio-ffmpeg
-# flash_attn   # Disable to pin to specific version in additional-requirements.txt
-gradio>=5.0.0
 numpy>=1.23.5,<2
 
-## Additional Requirements
-# Optimization libraries for WAN 2.1 on A100 GPUs
-flash_attn==2.3.3 
+## Optimization Libraries for WAN 2.1 on A100 GPUs
 xformers>=0.0.26.post1   # Faster attention ops
 bitsandbytes>=0.43.3     # 8-bit quantization
 torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility
 deepspeed>=0.10.0        # Multi-GPU training & inference
 triton>=2.1.0            # Kernel fusion optimization
-nvidia-pyindex           # Required for NVIDIA package indexing
-py3nvml                  # GPU monitoring tools
-fastertransformer        # NVIDIA’s Transformer optimization lib (optional)
+fastapi>=0.115.0  # Required for API
+pydantic>=2.9.2   # Required for validation
+## Optional dependencies (commented out if not explicitly used in app.py)
+# fastertransformer        # NVIDIA’s Transformer optimization lib (not used in app.py)
+# nvidia-pyindex           # Required for NVIDIA package indexing
+
+# FlashAttention must be installed separately due to CUDA compatibility issues

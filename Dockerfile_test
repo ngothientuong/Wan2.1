@@ -24,19 +24,9 @@ RUN pip install --upgrade pip setuptools wheel packaging
 # Copy Requirements Files
 COPY requirements.txt /app/requirements.txt
 
-# # Install Python Dependencies (Using Cached Layers)
-# RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Pre-download WAN 2.1 Model
-RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
-
 # Set Working Directory & Copy Application Files
 WORKDIR /app
 COPY . /app
 
-# Expose API Port
-EXPOSE 8000
-
-# Run Application
-# uvicork app:app --host 0.0.0.0 --port 8000 --workers 2
-# CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Start Bash for manual testing
+CMD ["/bin/bash"]

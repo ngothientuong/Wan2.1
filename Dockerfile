@@ -27,6 +27,15 @@ COPY requirements.txt /app/requirements.txt
 # Install Python Dependencies (Using Cached Layers)
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# Uninstall any preinstalled flash_attn (ensures a clean installation)
+RUN pip uninstall -y flash-attn
+
+# Install flash_attn from the correct prebuilt wheel
+RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu124torch2.4-cp310-cp310-linux_x86_64.whl
+
+# Clone & Install RAFT from Source
+RUN pip install --no-deps git+https://github.com/princeton-vl/RAFT.git
+
 # Pre-download WAN 2.1 Model
 RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
