@@ -1,4 +1,4 @@
-# Use NVIDIA’s Latest PyTorch Image (Ensure CUDA version matches your system)
+# ✅ Best NVIDIA image for PyTorch 2.4 + CUDA 12.3
 FROM nvcr.io/nvidia/pytorch:24.01-py3
 
 # Set Environment Variables for Performance Optimization
@@ -12,26 +12,44 @@ ENV TF32_MATMUL=1
 ENV CUDA_LAUNCH_BLOCKING=0
 ENV PYTHONUNBUFFERED=1
 
-# Install System Dependencies (Ensure CUDA Development Tools are Installed)
+# Ensure the environment uses CUDA 12.3 (Matches FlashAttention wheel)
+ENV CUDA_HOME=/usr/local/cuda-12.3
+ENV PATH="${CUDA_HOME}/bin:${PATH}"
+ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+
+# Install System Dependencies (CUDA + Build Tools + Python 3.10)
 RUN apt-get update && apt-get install -y \
-  python3-pip git wget curl ffmpeg libgl1-mesa-glx \
+  python3.10 python3.10-venv python3.10-dev python3-pip \
+  git wget curl ffmpeg libgl1-mesa-glx \
   ninja-build build-essential cmake \
   && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as Default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
+  update-alternatives --config python3
+
+# Verify Python version
+RUN python3 --version
 
 # Upgrade pip and install core dependencies
 RUN pip install --upgrade pip setuptools wheel packaging
 
+# Debug CUDA version inside the container
+RUN echo "🔍 Checking CUDA version inside container..." && \
+  nvcc --version && \
+  python -c "import torch; print('Torch CUDA Version:', torch.version.cuda)"
+
 # Copy Requirements Files
 COPY requirements.txt /app/requirements.txt
 
-# Install Python Dependencies (Using Cached Layers)
+# Install Python Dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Uninstall any preinstalled flash_attn (ensures a clean installation)
 RUN pip uninstall -y flash-attn
 
-# Install flash_attn from the correct prebuilt wheel
-RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu124torch2.4-cp310-cp310-linux_x86_64.whl
+# ✅ Install the correct FlashAttention wheel (CUDA 12.3, PyTorch 2.4)
+RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
 # Clone & Install RAFT from Source
 RUN pip install --no-deps git+https://github.com/princeton-vl/RAFT.git

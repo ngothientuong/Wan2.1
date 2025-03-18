@@ -1,4 +1,4 @@
-# Use NVIDIA’s Latest PyTorch Image (Ensure CUDA version matches your system)
+# ✅ Best NVIDIA image for PyTorch 2.4 + CUDA 12.3 (Matches FlashAttention)
 FROM nvcr.io/nvidia/pytorch:24.01-py3
 
 # Set Environment Variables for Performance Optimization
@@ -12,7 +12,12 @@ ENV TF32_MATMUL=1
 ENV CUDA_LAUNCH_BLOCKING=0
 ENV PYTHONUNBUFFERED=1
 
-# Install System Dependencies (Ensure CUDA Development Tools are Installed)
+# Ensure the environment uses CUDA 12.3 (Matches FlashAttention wheel)
+ENV CUDA_HOME=/usr/local/cuda-12.3
+ENV PATH="${CUDA_HOME}/bin:${PATH}"
+ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+
+# Install System Dependencies (CUDA + Build Tools)
 RUN apt-get update && apt-get install -y \
   python3-pip git wget curl ffmpeg libgl1-mesa-glx \
   ninja-build build-essential cmake \

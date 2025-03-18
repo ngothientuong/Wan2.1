@@ -324,11 +324,11 @@ prompt = (
 negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
 
 output = pipe(
-    image=image, 
-    prompt=prompt, 
-    negative_prompt=negative_prompt, 
-    height=height, width=width, 
-    num_frames=81, 
+    image=image,
+    prompt=prompt,
+    negative_prompt=negative_prompt,
+    height=height, width=width,
+    num_frames=81,
     guidance_scale=5.0
 ).frames[0]
 export_to_video(output, "output.mp4", fps=16)
