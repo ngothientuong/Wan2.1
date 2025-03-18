@@ -105,7 +105,8 @@ class VideoRequest(BaseModel):
     @validator('num_frames')
     def num_frames_must_be_4n_plus_1(cls, v):
         if (v - 1) % 4 != 0:
-            raise ValueError("num_frames must be of the form 4n+1")
+            v = ((v // 4) * 4) + 1
+            logging.warning(f"⚠️ Adjusted num_frames to {v} to satisfy 4n+1 constraint.")
         return v
 
     @root_validator(pre=False)
@@ -194,15 +195,19 @@ def interpolate_frames(keyframes, interval):
         return opencv_interpolation(keyframes, interval)
 
 def save_video_async(frames, output_file, fps, audio_path=None):
-    """Save video frames asynchronously."""
-    writer = ffmpeg.write_frames(output_file, (1280, 720), fps=fps)
-    writer.send(None)
-    for frame in frames:
-        writer.send(frame)
-    writer.close()
+    """Save video frames asynchronously with error handling."""
+    try:
+        writer = ffmpeg.write_frames(output_file, (1280, 720), fps=fps)
+        writer.send(None)
+        for frame in frames:
+            writer.send(frame)
+        writer.close()
 
-    if audio_path:
-        os.system(f"ffmpeg -i {output_file} -i {audio_path} -c:v copy -c:a aac {output_file.replace('.mp4', '_with_audio.mp4')}")
+        if audio_path:
+            os.system(f"ffmpeg -i {output_file} -i {audio_path} -c:v copy -c:a aac {output_file.replace('.mp4', '_with_audio.mp4')}")
+
+    except Exception as e:
+        logging.error(f"❌ Error saving video: {e}")
 
 def generate_video(request: VideoRequest):
     """Generate video based on the request parameters."""
@@ -284,7 +289,7 @@ def apply_text_overlay(frames, text, position="bottom", font_scale_factor=0.05):
         height, width, _ = frame_np.shape
 
         # Dynamically adjust font scale based on video resolution
-        font_scale = font_scale_factor * height  # Scales relative to video height
+        font_scale = max(1, int(font_scale_factor * height / 30))  # Auto-scale font size
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_color = (255, 255, 255)  # White text
         thickness = max(1, int(font_scale * 1.5))  # Scale thickness dynamically
