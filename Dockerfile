@@ -49,7 +49,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN pip uninstall -y flash-attn
 
 # ✅ Install the correct FlashAttention wheel (CUDA 12.3, PyTorch 2.4)
-RUN git clone https://github.com/princeton-vl/RAFT.git && cd RAFT && pip install -r requirements.txt && cd /app && rm -rf RAFT
+RUN git clone https://github.com/princeton-vl/RAFT.git
 
 
 # Pre-download WAN 2.1 Model
