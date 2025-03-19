@@ -49,10 +49,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 RUN pip uninstall -y flash-attn
 
 # ✅ Install the correct FlashAttention wheel (CUDA 12.3, PyTorch 2.4)
-RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+RUN git clone https://github.com/princeton-vl/RAFT.git && cd RAFT && pip install -r requirements.txt && cd /app && rm -rf RAFT
 
-# Clone & Install RAFT from Source
-RUN pip install --no-deps git+https://github.com/princeton-vl/RAFT.git
 
 # Pre-download WAN 2.1 Model
 RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main

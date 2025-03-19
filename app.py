@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import logging
 import time
 import os
+import sys
 from threading import Thread
 import cv2
 import numpy as np
@@ -14,9 +15,13 @@ from wan import WanT2V
 from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
 import asyncio
 
+# Add RAFT to the system path
+sys.path.append('/app/RAFT')
+
 try:
-    from raft import RAFT
-    from raft.utils.utils import InputPadder
+
+    from core.raft import RAFT
+    from core.utils.utils import InputPadder
     raft_model = RAFT()
     raft_model.load_model("/app/raft-things.pth")  # Ensure the model file exists
     USE_RAFT = True

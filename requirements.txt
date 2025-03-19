@@ -24,5 +24,7 @@ pydantic>=2.9.2   # Required for validation
 ## Optional dependencies (commented out if not explicitly used in app.py)
 # fastertransformer        # NVIDIA’s Transformer optimization lib (not used in app.py)
 # nvidia-pyindex           # Required for NVIDIA package indexing
-
 # FlashAttention must be installed separately due to CUDA compatibility issues
+
+## Dependencies
+transformer-engine>=2.1.0
