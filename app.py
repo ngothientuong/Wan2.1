@@ -17,52 +17,46 @@ import asyncio
 import argparse
 
 
-
-# Add RAFT to the system path
-sys.path.append('/app/RAFT/core')
-
-try:
-    from raft import RAFT
-    from utils.utils import InputPadder
-
-    # Create dummy argparse arguments to pass to RAFT
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--small", action="store_true", help="use small model")
-    parser.add_argument("--mixed_precision", action="store_true", help="use mixed precision")
-    parser.add_argument("--dropout", type=float, default=0, help="dropout rate")
-    parser.add_argument("--alternate_corr", action="store_true", help="use alternate correlation block")
-
-    # Parse args
-    args = parser.parse_args([])  # Simulate no command-line arguments
-
-    # Initialize RAFT model with args
-    raft_model = RAFT(args)  # Use RAFT directly since load_raft_model isn’t defined
-    raft_model.to("cuda" if torch.cuda.is_available() else "cpu")  # Move model to GPU if available
-
-    # Load model weights manually
-    model_path = "/app/RAFT/core/raft-things.pth"
-    if os.path.exists(model_path):
-        state_dict = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
-
-        # Remove "module." prefix if present in state_dict keys
-        if list(state_dict.keys())[0].startswith("module."):
-            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-
-        raft_model.load_state_dict(state_dict)  # Load model weights properly
-        raft_model.eval()  # Set to evaluation mode
-        USE_RAFT = True
-        logging.info("✅ RAFT model loaded successfully.")
-    else:
-        USE_RAFT = False
-        logging.warning(f"⚠️ RAFT model file not found at {model_path}")
-except Exception as e:
-    USE_RAFT = False
-    logging.warning(f"⚠️ RAFT not available, falling back to OpenCV optical flow: {e}")
-
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+
+# RAFT Model Loading
+USE_RAFT = False
+try:
+    RAFT_PATH = "/app/RAFT/core"
+    sys.path.append(RAFT_PATH)
+
+    from raft import RAFT
+    from utils.utils import InputPadder
+
+    # Create RAFT model with dummy arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--small", action="store_true")
+    parser.add_argument("--mixed_precision", action="store_true")
+    parser.add_argument("--dropout", type=float, default=0)
+    parser.add_argument("--alternate_corr", action="store_true")
+    args = parser.parse_args([])
+
+    raft_model = RAFT(args)
+    raft_model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Load RAFT weights
+    model_path = os.path.join(RAFT_PATH, "raft-things.pth")
+    if os.path.exists(model_path):
+        state_dict = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+
+        # Remove "module." prefix if present in state_dict keys
+        new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        raft_model.load_state_dict(new_state_dict, strict=False)  # Load state dict
+        raft_model.eval()
+
+        USE_RAFT = True
+        logging.info("✅ RAFT model loaded successfully.")
+    else:
+        logging.warning(f"⚠️ RAFT model file not found at {model_path}")
+except Exception as e:
+    logging.warning(f"⚠️ RAFT not available, falling back to OpenCV optical flow: {e}")
 
 # Device configuration
 NUM_GPUS = torch.cuda.device_count()
