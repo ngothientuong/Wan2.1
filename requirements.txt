@@ -30,3 +30,4 @@ pydantic>=2.9.2   # Required for validation
 transformer-engine>=2.1.0
 uvicorn>=0.34.0  # ASGI server for FastAPI
 h11>=0.14.0  # HTTP/1.1 support (required by uvicorn)
+# opencv-python-headless==4.5.5.64  because of error cv2.dnn.DictValue. Remove heavy weight opencv-python

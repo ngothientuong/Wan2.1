@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, validator, root_validator
+from pydantic import BaseModel, validator, root_validator, model_validator
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,21 +14,51 @@ import imageio_ffmpeg as ffmpeg
 from wan import WanT2V
 from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
 import asyncio
+import argparse
+
+
 
 # Add RAFT to the system path
-sys.path.append('/app/RAFT')
+sys.path.append('/app/RAFT/core')
 
 try:
+    from raft import RAFT
+    from utils.utils import InputPadder
 
-    from core.raft import RAFT
-    from core.utils.utils import InputPadder
-    raft_model = RAFT()
-    raft_model.load_model("/app/raft-things.pth")  # Ensure the model file exists
-    USE_RAFT = True
-    logging.info("✅ RAFT model loaded successfully.")
+    # Create dummy argparse arguments to pass to RAFT
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--small", action="store_true", help="use small model")
+    parser.add_argument("--mixed_precision", action="store_true", help="use mixed precision")
+    parser.add_argument("--dropout", type=float, default=0, help="dropout rate")
+    parser.add_argument("--alternate_corr", action="store_true", help="use alternate correlation block")
+
+    # Parse args
+    args = parser.parse_args([])  # Simulate no command-line arguments
+
+    # Initialize RAFT model with args
+    raft_model = RAFT(args)  # Use RAFT directly since load_raft_model isn’t defined
+    raft_model.to("cuda" if torch.cuda.is_available() else "cpu")  # Move model to GPU if available
+
+    # Load model weights manually
+    model_path = "/app/RAFT/core/raft-things.pth"
+    if os.path.exists(model_path):
+        state_dict = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu", weights_only=False)
+
+        # Remove "module." prefix if present in state_dict keys
+        if list(state_dict.keys())[0].startswith("module."):
+            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
+        raft_model.load_state_dict(state_dict)  # Load model weights properly
+        raft_model.eval()  # Set to evaluation mode
+        USE_RAFT = True
+        logging.info("✅ RAFT model loaded successfully.")
+    else:
+        USE_RAFT = False
+        logging.warning(f"⚠️ RAFT model file not found at {model_path}")
 except Exception as e:
     USE_RAFT = False
     logging.warning(f"⚠️ RAFT not available, falling back to OpenCV optical flow: {e}")
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -114,7 +144,8 @@ class VideoRequest(BaseModel):
             logging.warning(f"⚠️ Adjusted num_frames to {v} to satisfy 4n+1 constraint.")
         return v
 
-    @root_validator(pre=False)
+#    @root_validator(pre=False)
+    @model_validator(mode='after')
     def set_sample_steps_default(cls, values):
         """Set sample_steps based on task if not provided."""
         if values.get('sample_steps') is None:
