@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, validator, root_validator
+from pydantic import BaseModel, validator, root_validator, model_validator
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,25 +14,50 @@ import imageio_ffmpeg as ffmpeg
 from wan import WanT2V
 from wan.configs import WAN_CONFIGS, SIZE_CONFIGS
 import asyncio
+import argparse
+import subprocess
 
-# Add RAFT to the system path
-sys.path.append('/app/RAFT')
-
-try:
-
-    from core.raft import RAFT
-    from core.utils.utils import InputPadder
-    raft_model = RAFT()
-    raft_model.load_model("/app/raft-things.pth")  # Ensure the model file exists
-    USE_RAFT = True
-    logging.info("✅ RAFT model loaded successfully.")
-except Exception as e:
-    USE_RAFT = False
-    logging.warning(f"⚠️ RAFT not available, falling back to OpenCV optical flow: {e}")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
+
+# RAFT Model Loading
+USE_RAFT = False
+try:
+    RAFT_PATH = "/app/RAFT/core"
+    sys.path.append(RAFT_PATH)
+
+    from raft import RAFT
+    from utils.utils import InputPadder
+
+    # Create RAFT model with dummy arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--small", action="store_true")
+    parser.add_argument("--mixed_precision", action="store_true")
+    parser.add_argument("--dropout", type=float, default=0)
+    parser.add_argument("--alternate_corr", action="store_true")
+    args = parser.parse_args([])
+
+    raft_model = RAFT(args)
+    raft_model.to("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Load RAFT weights
+    model_path = os.path.join(RAFT_PATH, "raft-things.pth")
+    if os.path.exists(model_path):
+        state_dict = torch.load(model_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
+
+        # Remove "module." prefix if present in state_dict keys
+        new_state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        raft_model.load_state_dict(new_state_dict, strict=False)  # Load state dict
+        raft_model.eval()
+
+        USE_RAFT = True
+        logging.info("✅ RAFT model loaded successfully.")
+    else:
+        logging.warning(f"⚠️ RAFT model file not found at {model_path}")
+except Exception as e:
+    logging.warning(f"⚠️ RAFT not available, falling back to OpenCV optical flow: {e}")
 
 # Device configuration
 NUM_GPUS = torch.cuda.device_count()
@@ -51,19 +76,65 @@ def get_optimal_batch_size():
     else:
         return 32  # Safe default
 
-def load_model(task, ckpt_dir, ulysses_size=1, ring_size=1, t5_fsdp=False, dit_fsdp=False):
-    """Load or retrieve a cached WanT2V model."""
-    key = (task, ulysses_size, ring_size, t5_fsdp, dit_fsdp)
+
+def log_gpu_usage():
+    """Logs GPU memory usage and processes running on each GPU."""
+    logging.info("📊 Checking GPU usage...")
+    try:
+        result = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, text=True)
+        logging.info("\n" + result.stdout)  # Print entire nvidia-smi output
+    except Exception as e:
+        logging.error(f"❌ Failed to log GPU usage: {e}")
+
+def load_model(task, ckpt_dir, t5_fsdp=False, dit_fsdp=False):
+    """Load or retrieve a cached WanT2V model properly utilizing multiple GPUs with logging."""
+    key = (task, t5_fsdp, dit_fsdp)
     if key not in MODEL_CACHE:
         logging.info(f"🔄 Loading {task} model on {DEVICE}...")
+
         config = WAN_CONFIGS[task]
-        model = WanT2V(config=config, checkpoint_dir=ckpt_dir, ulysses_size=ulysses_size, ring_size=ring_size).to(DEVICE).half()
-        model = torch.compile(model, backend="tensorrt")
+        model = WanT2V(config=config, checkpoint_dir=ckpt_dir)
+
+        logging.info("🖥️ Moving Model Components to GPU...")
+
+        model.text_encoder.model.to(DEVICE)
+        logging.info(f"📌 Text Encoder moved to {DEVICE}")
+
+        model.vae.model.to(DEVICE)
+        logging.info(f"📌 VAE moved to {DEVICE}")
+
+        model.model.to(DEVICE)
+        logging.info(f"📌 Core Model moved to {DEVICE}")
+
+        # �� Debug: Print all attributes of the model
+        logging.info(f"🔍 WanT2V attributes: {dir(model)}")
+        #  log the exact function signature
+        logging.info(f"🔍 WanT2V.generate() signature: {model.generate.__doc__}")
+
+        # ❌ Fix: Check if `clip` exists before using it
+        if hasattr(model, "clip") and hasattr(model.clip, "model"):
+            model.clip.model.to(DEVICE)
+            logging.info(f"📌 CLIP moved to {DEVICE}")
+        else:
+            logging.warning("⚠️ CLIP module not found in WanT2V. Skipping.")
+
+        # ✅ Convert only SAFE components to FP16
+        model.model = model.model.to(torch.float16)  # ✅ Core model in FP16
+        model.text_encoder.model = model.text_encoder.model.to(torch.float16)  # ✅ Text Encoder in FP16
+        model.vae.model = model.vae.model.to(torch.float16)  # ✅ VAE in FP16
+
+        if hasattr(model, "clip") and hasattr(model.clip, "model"):
+            model.clip.model = model.clip.model.to(torch.float32)  # ❌ CLIP stays in FP32 (only if exists)
 
         if NUM_GPUS > 1:
-            model = nn.DataParallel(model)
+            logging.info(f"🚀 Using {NUM_GPUS} GPUs with DataParallel!")
+            model.model = nn.DataParallel(model.model)  # ✅ Wrap only the core model
 
         MODEL_CACHE[key] = model
+
+        # ✅ Log GPU Usage AFTER Loading Model
+        log_gpu_usage()
+
     return MODEL_CACHE[key]
 
 class VideoRequest(BaseModel):
@@ -114,15 +185,14 @@ class VideoRequest(BaseModel):
             logging.warning(f"⚠️ Adjusted num_frames to {v} to satisfy 4n+1 constraint.")
         return v
 
-    @root_validator(pre=False)
+    @model_validator(mode='after')
     def set_sample_steps_default(cls, values):
         """Set sample_steps based on task if not provided."""
-        if values.get('sample_steps') is None:
-            task = values.get('task')
-            if task.startswith('t2v'):
-                values['sample_steps'] = 50
-            elif task.startswith('i2v'):
-                values['sample_steps'] = 40
+        if values.sample_steps is None:  # ✅ Use dot notation
+            if values.task.startswith('t2v'):
+                values.sample_steps = 50
+            elif values.task.startswith('i2v'):
+                values.sample_steps = 40
         return values
 
 def extend_prompt(prompt, method, model, target_lang):
@@ -219,12 +289,23 @@ def generate_video(request: VideoRequest):
     start_time = time.time()
     torch.manual_seed(request.seed)
 
-    model = load_model(request.task, request.ckpt_dir, request.ulysses_size, request.ring_size, request.t5_fsdp, request.dit_fsdp)
+    model = load_model(request.task, request.ckpt_dir, request.t5_fsdp, request.dit_fsdp)
 
     # Handle T2I task right here
     if request.task == 't2i':
         with torch.no_grad():  # No gradients needed for inference
-            image = model.generate(prompts=[request.prompt], num_frames=1, size=request.size, device=DEVICE)[0]
+            image = model.generate(
+                input_prompt=request.prompt,  # ✅ Corrected argument name
+                size=request.size,  # ✅ Ensure this is a tuple (width, height)
+                frame_num=1,  # ✅ T2I should only generate 1 frame
+                shift=request.sample_shift or 5.0,
+                sample_solver=request.sample_solver or 'unipc',
+                sampling_steps=request.sample_steps or 40,
+                guide_scale=request.sample_guide_scale or 5.0,
+                n_prompt="",  # ✅ Set a default empty negative prompt
+                seed=request.seed,
+                offload_model=request.offload_model
+            )[0]  # ✅ Get the first (and only) frame
         output_file = request.save_file or f"output_image_{int(time.time())}.png"
         image_np = image.cpu().numpy()
         # Normalize to 0-255 if needed, then save as PNG
@@ -248,9 +329,32 @@ def generate_video(request: VideoRequest):
         with torch.no_grad():
             if request.task.startswith('i2v') and request.image:
                 image_tensor = preprocess_image(request.image)
-                batch_frames = model.generate(prompts=batch_prompts, num_frames=1, size=request.size, device=DEVICE, image=image_tensor)
+                batch_frames = model.generate(
+                    input_prompt=batch_prompts,  # ✅ Corrected argument name
+                    size=request.size,  # ✅ Ensure this is a tuple (width, height)
+                    frame_num=request.num_frames,  # ✅ Corrected num_frames → frame_num
+                    shift=request.sample_shift or 5.0,
+                    sample_solver=request.sample_solver or 'unipc',
+                    sampling_steps=request.sample_steps or 40,
+                    guide_scale=request.sample_guide_scale or 5.0,
+                    n_prompt="",  # ✅ Set a default empty negative prompt
+                    seed=request.seed,
+                    offload_model=request.offload_model,
+                    image=image_tensor  # ✅ Only pass image for 'i2v' tasks
+                )
             else:
-                batch_frames = model.generate(prompts=batch_prompts, num_frames=1, size=request.size, device=DEVICE)
+                batch_frames = model.generate(
+                    input_prompt=batch_prompts,  # ✅ Corrected argument name
+                    size=request.size,  # ✅ Ensure this is a tuple (width, height)
+                    frame_num=request.num_frames,  # ✅ Corrected num_frames → frame_num
+                    shift=request.sample_shift or 5.0,
+                    sample_solver=request.sample_solver or 'unipc',
+                    sampling_steps=request.sample_steps or 40,
+                    guide_scale=request.sample_guide_scale or 5.0,
+                    n_prompt="",  # ✅ Set a default empty negative prompt
+                    seed=request.seed,
+                    offload_model=request.offload_model
+                )
 
         keyframes.extend(batch_frames)
 

@@ -9,3 +9,16 @@ python3 generate.py \
   --base_seed 42 \
   --offload_model=True \
   --ckpt_dir "/models/Wan2.1-T2V-14B"
+
+curl -X 'POST' 'http://0.0.0.0:8000/generate/' -H 'Content-Type: application/json' -d '{
+"task": "t2v-14B",
+"prompt": "A cybernetic warrior clad in sleek, black nanotech armor stands in the center of a neon-lit dystopian city. The camera initiates a slow-motion 360-degree bullet-time rotation, capturing every detail of the high-tech exosuit, glowing holographic displays on their forearms, and the pulsating neon lights reflecting off rain-soaked streets. The scene freezes as the warrior deflects a volley of plasma bullets mid-air, each projectile suspended in time with glowing energy trails. The moment resumes as the camera smoothly accelerates forward, following the warrior as they leap onto a hovering motorcycle, neon light trails following in their wake. The city skyline in the background flickers with holographic billboards, robotic drones scanning the streets below, and flying cars zipping through the stormy night sky.",
+"size": "1280*720",
+"num_frames": 160,
+"fps": 16,
+"seed": 42,
+"ckpt_dir": "/app/models/Wan2.1-T2V-14B",
+"t5_fsdp": false,
+"dit_fsdp": false,
+"save_file": "output_10s_matrix.mp4"
+}'

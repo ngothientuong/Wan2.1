@@ -38,10 +38,10 @@ jobs:
             echo "exists=false" >> $GITHUB_ENV
 
       - name: Build and push Docker image if not exists
-        if: steps.check_image.outputs.exists == 'false'
+        if: ${{ steps.check_image.outputs.exists }} == 'false'
         run: |
           VERSION=$(cat VERSION)
-          az acr build --registry tngodemo1cr \
-            --image ttv/wan21/wan2.1:$VERSION \
-            --file Dockerfile . \
-            --timeout 14400  # Increase timeout to 4 hours
+          docker build -t ttv/wan21/wan2.1:$VERSION -f Dockerfile .
+          az acr login --name tngodemo1cr
+          docker tag ttv/wan21/wan2.1:$VERSION tngodemo1cr.azurecr.io/ttv/wan21/wan2.1:$VERSION
+          docker push tngodemo1cr.azurecr.io/ttv/wan21/wan2.1:$VERSION

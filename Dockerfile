@@ -1,10 +1,10 @@
-# ✅ Best NVIDIA image for PyTorch 2.4 + CUDA 12.3
-FROM nvcr.io/nvidia/pytorch:24.06-py3
+# ✅ Best NVIDIA image for PyTorch 2.4 + CUDA 12.5
+FROM nvcr.io/nvidia/pytorch:24.07-py3
 
 # Set Environment Variables for Performance Optimization
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME="/root/.cache/huggingface"
-ENV MODEL_DIR="/models/Wan2.1-T2V-14B"
+ENV MODEL_DIR="/app/models/Wan2.1-T2V-14B"
 ENV TORCH_HOME="/root/.cache/torch"
 ENV PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 ENV XFORMERS_FORCE_DISABLE_TRITON=1
@@ -12,16 +12,25 @@ ENV TF32_MATMUL=1
 ENV CUDA_LAUNCH_BLOCKING=0
 ENV PYTHONUNBUFFERED=1
 
-# Ensure the environment uses CUDA 12.3 (Matches FlashAttention wheel)
-ENV CUDA_HOME=/usr/local/cuda-12.3
+# ✅ Fix: Allow ALL GPUs for Multi-GPU training
+ENV CUDA_VISIBLE_DEVICES=all
+
+# ✅ Fix: Ensure the environment uses CUDA 12.5
+ENV CUDA_HOME=/usr/local/cuda-12.5
 ENV PATH="${CUDA_HOME}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
+
+# ✅ Fix: Enable NCCL Multi-GPU Communication
+ENV NCCL_P2P_DISABLE=0
+ENV NCCL_IB_DISABLE=0
+ENV NCCL_DEBUG=INFO
+ENV NCCL_SOCKET_IFNAME=eth0
 
 # Install System Dependencies (CUDA + Build Tools + Python 3.10)
 RUN apt-get update && apt-get install -y \
   python3.10 python3.10-venv python3.10-dev python3-pip \
   git wget curl ffmpeg libgl1-mesa-glx \
-  ninja-build build-essential cmake \
+  ninja-build build-essential cmake unzip \
   && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.10 as Default
@@ -51,11 +60,18 @@ RUN pip uninstall -y flash-attn
 # ✅ Install the correct FlashAttention wheel (CUDA 12.3, PyTorch 2.4)
 RUN pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
-# Clone RAFT Repository to be used by app.py
+# Clone RAFT Repository
 RUN git clone https://github.com/princeton-vl/RAFT.git /app/RAFT
 
-# Pre-download WAN 2.1 Model
-RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
+# ✅ Fix: Download and Extract RAFT Models
+WORKDIR /app/RAFT
+RUN ./download_models.sh && \
+  mv models/* /app/RAFT/core/ && \
+  rm -rf models models.zip
+
+# ✅ Fix: Ensure models directory exists and pre-download WAN 2.1 Model
+RUN mkdir -p ${MODEL_DIR} && \
+  huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
 # Set Working Directory & Copy Application Files
 WORKDIR /app
