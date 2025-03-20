@@ -21,7 +21,7 @@ ENV LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
 RUN apt-get update && apt-get install -y \
   python3.10 python3.10-venv python3.10-dev python3-pip \
   git wget curl ffmpeg libgl1-mesa-glx \
-  ninja-build build-essential cmake \
+  ninja-build build-essential cmake unzip \
   && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.10 as Default
@@ -60,12 +60,16 @@ RUN ./download_models.sh && \
   mv models/* /app/RAFT/core/ && \
   rm -rf models models.zip
 
-# Pre-download WAN 2.1 Model
-RUN huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
+# ✅ Fix: Ensure models directory exists and pre-download WAN 2.1 Model
+RUN mkdir -p ${MODEL_DIR} && \
+  huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
 # Set Working Directory & Copy Application Files
 WORKDIR /app
 COPY . /app
+
+# ✅ Fix: Ensure `models` symlink is set correctly inside the container
+RUN ln -s /models /app/models
 
 # Expose API Port
 EXPOSE 8000
