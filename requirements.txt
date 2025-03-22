@@ -15,9 +15,9 @@ numpy>=1.23.5,<2
 
 ## Optimization Libraries for WAN 2.1 on A100 GPUs
 xformers>=0.0.26.post1   # Faster attention ops
-bitsandbytes>=0.43.3     # 8-bit quantization
-torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility
-triton>=2.1.0            # Kernel fusion optimization
+# bitsandbytes>=0.43.3     # 8-bit quantization - need `pip install libstdc++.so.6` in Dockerfile Use bnb.nn.Linear8bit in model definition OR load quantized models from Hugging Face (with load_in_8bit=True) - NOT currently used in app.py
+# torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility - You’d need to compile your model via torch_tensorrt.compile(model, ...) — best for inference-only GPU deployments - NOT currently used in app.py
+# triton>=2.1.0            # Kernel fusion optimization - Use custom Triton ops (hard) or rely on other libs like xformers or FlashAttention which internally use Triton - NOT currently used in app.py
 fastapi>=0.115.0  # Required for API
 pydantic>=2.9.2   # Required for validation
 huggingface_hub>=0.22.2
@@ -27,7 +27,7 @@ huggingface_hub>=0.22.2
 # FlashAttention must be installed separately due to CUDA compatibility issues
 
 ## Dependencies
-transformer-engine>=2.1.0
+transformer-engine>=2.1.0 # Only useful if using Transformer layers from NVIDIA, like in GPT- or LLaMA-style models. You’d have to rewrite parts of WAN to plug them in - NOT currently used in app.py
 uvicorn>=0.34.0  # ASGI server for FastAPI
 h11>=0.14.0  # HTTP/1.1 support (required by uvicorn)
 opencv-python-headless==4.5.5.64 # because of error cv2.dnn.DictValue. Remove heavy weight opencv-python
