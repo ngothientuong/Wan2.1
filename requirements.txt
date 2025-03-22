@@ -17,7 +17,6 @@ numpy>=1.23.5,<2
 xformers>=0.0.26.post1   # Faster attention ops
 bitsandbytes>=0.43.3     # 8-bit quantization
 torch-tensorrt>=2.6.0    # PyTorch-TensorRT compatibility
-deepspeed>=0.10.0        # Multi-GPU training & inference
 triton>=2.1.0            # Kernel fusion optimization
 fastapi>=0.115.0  # Required for API
 pydantic>=2.9.2   # Required for validation
