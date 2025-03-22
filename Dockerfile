@@ -94,9 +94,9 @@ CMD ["torchrun --nproc_per_node=$NUM_GPUS app.py"]
 
 ## How to run during docker
 # docker run --gpus all -p 8000:8000 \
-#   -e NUM_GPUS=4 \
-#   -e UVICORN_WORKERS=4 \
+#   -e NUM_GPUS=2 \
+#   -e UVICORN_WORKERS=2 \
 #   -e UVICORN_RELOAD=true \
 #   -e UVICORN_LOG_LEVEL=debug \
-#   -v /path/to/models:/mnt/storage/models \
-#   your_image_name
+#   -v /mnt/storage/models:/mnt/storage/models \
+#   tngodemo1cr.azurecr.io/ttv/wan21/wan2.1:1.0.0
