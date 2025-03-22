@@ -69,9 +69,9 @@ RUN ./download_models.sh && \
   mv models/* /app/RAFT/core/ && \
   rm -rf models models.zip
 
-# ✅ Fix: Ensure models directory exists and pre-download WAN 2.1 Model
-RUN mkdir -p ${MODEL_DIR} && \
-  huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
+# # ✅ Fix: Ensure models directory exists and pre-download WAN 2.1 Model
+# RUN mkdir -p ${MODEL_DIR} && \
+#   huggingface-cli download Wan-AI/Wan2.1-T2V-14B --local-dir ${MODEL_DIR} --revision main
 
 # Set Working Directory & Copy Application Files
 WORKDIR /app
@@ -81,4 +81,22 @@ COPY . /app
 EXPOSE 8000
 
 # Run Application
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+
+# Define defaults, but allow overrides with `-e`
+ENV NUM_GPUS=2
+ENV UVICORN_WORKERS=2
+ENV UVICORN_RELOAD=false
+ENV UVICORN_LOG_LEVEL=info
+# Use ENTRYPOINT for dynamic substitution
+ENTRYPOINT ["bash", "-c"]
+CMD ["torchrun --nproc_per_node=$NUM_GPUS app.py"]
+
+## How to run during docker
+# docker run --gpus all -p 8000:8000 \
+#   -e NUM_GPUS=4 \
+#   -e UVICORN_WORKERS=4 \
+#   -e UVICORN_RELOAD=true \
+#   -e UVICORN_LOG_LEVEL=debug \
+#   -v /path/to/models:/mnt/storage/models \
+#   your_image_name

@@ -21,6 +21,7 @@ deepspeed>=0.10.0        # Multi-GPU training & inference
 triton>=2.1.0            # Kernel fusion optimization
 fastapi>=0.115.0  # Required for API
 pydantic>=2.9.2   # Required for validation
+huggingface_hub>=0.22.2
 ## Optional dependencies (commented out if not explicitly used in app.py)
 # fastertransformer        # NVIDIA’s Transformer optimization lib (not used in app.py)
 # nvidia-pyindex           # Required for NVIDIA package indexing
