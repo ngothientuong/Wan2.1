@@ -33,10 +33,16 @@ if ! command -v docker &>/dev/null; then
   newgrp docker
 fi
 
-echo "🧠 Installing NVIDIA Container Toolkit..."
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
+echo "🧠 Checking NVIDIA Container Toolkit..."
+if ! command -v nvidia-ctk &>/dev/null; then
+  echo "🧠 Installing NVIDIA Container Toolkit..."
+  sudo apt-get install -y nvidia-container-toolkit
+  sudo nvidia-ctk runtime configure --runtime=docker
+  sudo systemctl restart docker
+else
+  echo "✅ NVIDIA Container Toolkit already installed."
+fi
+
 
 # ========== 🔐 4️⃣ Install Azure CLI (for ACR login) ==========
 if ! command -v az &>/dev/null; then
